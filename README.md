@@ -1,23 +1,38 @@
-# Laerskool Baanbreker Sewens 2026
+# Laerskool Baanbreker Sewens 2026 — Online Tournament System
 
-Online-ready tournament management app for 16–17 October 2026.
+Tournament dates: **16–17 October 2026**.
 
-## Current features
-- Public tournament dashboard
-- O/11 and O/12
-- Teams, pools, standings and fixtures
-- Live score/status fields
-- One referee per match (no assistant referees)
-- Referee allocations and printable schedule
-- Admin customization for tournament branding
-- Baanbreker school logo included
-- **Individual team logo upload** to Supabase Storage when online
-- Local demo fallback when Supabase config is blank
+## Live stack
+- Static frontend: `index.html`, `styles.css`, `app.js`
+- Supabase Auth for admin login
+- Supabase Postgres for teams, matches, referees, allocations and settings
+- Supabase Storage bucket `team-logos` for individual team logos
+- Supabase Realtime for live score / fixture / referee updates
+- Vercel-ready static deployment
 
-## Supabase
-`config.js` contains the project URL and browser-safe publishable key. Never put a service_role/secret key in frontend files.
+## Supabase setup
+1. Run the original `supabase.sql` if you have not already.
+2. Run `supabase_patch.sql` once.
+3. Confirm Storage buckets `team-logos` and `tournament-assets` exist.
+4. Create your admin user in Supabase Authentication.
+5. Insert that user's UUID into `admin_users` with role `super_admin` and `active=true`.
 
-The SQL creates the database tables, storage buckets and RLS policies. Team logos upload to the `team-logos` bucket.
+## Frontend configuration
+Edit `config.js` with the Supabase project URL and **publishable** key only. Never put a service-role/secret key in the browser.
 
-## Run
-Open `index.html` for a local test. For the online version, deploy this folder to Vercel or another static host.
+## Local test
+Open `index.html` or serve the folder with a simple static web server.
+
+## Vercel
+Import this folder/repository into Vercel. No server-side runtime is required for the frontend.
+
+## Admin capabilities
+- Secure email/password admin login
+- Team create/edit and individual logo upload
+- Referee create/edit
+- One referee per fixture (no assistant referees)
+- Fixture create/edit/delete
+- Live score/status updates
+- Tournament branding and colours
+- Public big-screen view
+- Live multi-device sync through Supabase Realtime
