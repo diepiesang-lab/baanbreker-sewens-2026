@@ -10,6 +10,7 @@ alter table public.teams
 -- Optional privacy improvement: keep referee contact details private.
 -- The app only needs referee names/qualifications publicly.
 drop policy if exists "Public can view referees" on public.referees;
+drop policy if exists "Public can view active referee names" on public.referees;
 create policy "Public can view active referee names"
 on public.referees
 for select
