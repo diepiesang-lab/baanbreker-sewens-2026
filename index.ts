@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
   const { data: { user: caller }, error: callerError } = await adminClient.auth.getUser(token)
   if (callerError || !caller) return new Response(JSON.stringify({ error: 'Invalid session' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
-  const { data: adminRow } = await adminClient.from('admin_users').select('user_id,active').eq('user_id', caller.id).maybeSingle()
+  const { data: adminRow } = await adminClient.from('admin_users').select('id,active').eq('id', caller.id).maybeSingle()
   if (!adminRow?.active) return new Response(JSON.stringify({ error: 'Not authorized as an active administrator' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
   const body = await req.json().catch(() => ({}))
@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
   const invitedUser = invited.user
   if (!invitedUser) return new Response(JSON.stringify({ error: 'Invitation created but no user was returned' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
-  const { error: rowError } = await adminClient.from('admin_users').upsert({ user_id: invitedUser.id, role: 'admin', active: true }, { onConflict: 'user_id' })
+  const { error: rowError } = await adminClient.from('admin_users').upsert({ id: invitedUser.id, role: 'admin', active: true }, { onConflict: 'id' })
   if (rowError) return new Response(JSON.stringify({ error: `Invite sent, but admin access could not be registered: ${rowError.message}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
   return new Response(JSON.stringify({ ok: true, email, message: 'Admin invitation sent' }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
