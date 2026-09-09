@@ -93,7 +93,7 @@ async function bootOnline(){
 
 async function checkAdmin(){
   if(!user){admin=false;return false}
-  const {data:row,error}=await sb.from('admin_users').select('id,role,active,display_name').eq('id',user.id).maybeSingle();
+  const {data:row,error}=await sb.from('admin_users').select('user_id,role,active').eq('user_id',user.id).maybeSingle();
   if(error){console.error(error);admin=false;return false}
   admin=!!(row?.active);
   return admin;
@@ -187,6 +187,20 @@ async function signIn(){
   if(!ok){await sb.auth.signOut();if(btn)btn.disabled=false;return alert('Hierdie rekening is nie as Baanbreker-administrateur gemagtig nie.')}
   document.querySelector('.modal')?.remove();render();
 }
+async function inviteAdmin(){
+  if(!admin||!sb||!session)return alert('Admin-toegang benodig.');
+  const input=document.getElementById('invite_email'); const email=input?.value.trim().toLowerCase();
+  if(!email)return alert('Voer asseblief die nuwe admin se e-posadres in.');
+  const status=document.getElementById('invite_status'); if(status)status.textContent='Stuur uitnodiging…';
+  try{
+    const {data,error}=await sb.functions.invoke('invite-admin',{body:{email,redirectTo:window.location.origin}});
+    if(error)throw error;
+    if(data?.error)throw new Error(data.error);
+    if(status)status.textContent='Uitnodiging gestuur na '+email+'.';
+    if(input)input.value='';
+  }catch(e){console.error(e);if(status)status.textContent='Kon nie uitnodiging stuur nie.';alert(e.message||'Kon nie uitnodiging stuur nie. Maak seker die invite-admin Edge Function is ontplooi.');}
+}
+
 async function signOut(){await sb.auth.signOut();session=null;user=null;admin=false;render()}
 function toggleAdmin(){
   if(admin){signOut();return}
@@ -304,11 +318,11 @@ async function seedDemo(){
 
 function adminView(){
   if(!admin)return `<div class="panel empty"><h2>Admin toegang</h2><p>Meld aan met jou Supabase admin-rekening om die toernooi te bestuur.</p><button class="primary" onclick="toggleAdmin()">Meld aan</button></div>`;
-  return `<div class="title-row"><div><h2>Admin-kontroles</h2><p>Volledig aanpasbare toernooi-instellings en aanlyn databestuur.</p></div><button class="danger" onclick="signOut()">Meld af</button></div><div class="admin-grid"><section class="panel"><h3>Branding & koppelvlak</h3><label>Toernooi naam<input id="s_name" value="${esc(data.settings.name)}"></label><label>Subtitel<input id="s_sub" value="${esc(data.settings.subtitle)}"></label><label>Datums<input id="s_dates" value="${esc(data.settings.dates)}"></label><label>Plek<input id="s_loc" value="${esc(data.settings.location)}"></label><label>Logo teks<input id="s_logo" value="${esc(data.settings.logoText)}"></label><div class="twocol"><label>Primêre kleur<input id="s_primary" type="color" value="${data.settings.primary}"></label><label>Aksentkleur<input id="s_accent" type="color" value="${data.settings.accent}"></label></div><button class="primary" onclick="saveSettings()">Stoor koppelvlak</button></section><section class="panel"><h3>Databestuur</h3><p class="muted">Gekoppel aan Supabase. Veranderinge word tussen toestelle gesinkroniseer.</p><button onclick="seedDemo()">Laai demo spanne</button><button onclick="exportData()">Voer plaaslike data uit</button><button onclick="importPrompt()">Voer plaaslike data in</button></section></div>`;
+  return `<div class="title-row"><div><h2>Admin-kontroles</h2><p>Volledig aanpasbare toernooi-instellings en aanlyn databestuur.</p></div><button class="danger" onclick="signOut()">Meld af</button></div><div class="admin-grid"><section class="panel"><h3>Branding & koppelvlak</h3><label>Toernooi naam<input id="s_name" value="${esc(data.settings.name)}"></label><label>Subtitel<input id="s_sub" value="${esc(data.settings.subtitle)}"></label><label>Datums<input id="s_dates" value="${esc(data.settings.dates)}"></label><label>Plek<input id="s_loc" value="${esc(data.settings.location)}"></label><label>Logo teks<input id="s_logo" value="${esc(data.settings.logoText)}"></label><div class="twocol"><label>Primêre kleur<input id="s_primary" type="color" value="${data.settings.primary}"></label><label>Aksentkleur<input id="s_accent" type="color" value="${data.settings.accent}"></label></div><button class="primary" onclick="saveSettings()">Stoor koppelvlak</button></section><section class="panel"><h3>Admin-bestuur</h3><p class="muted">Voeg ekstra administrateurs by. Die uitnodiging word per e-pos deur Supabase gestuur.</p><label>Nuwe admin e-pos<input id="invite_email" type="email" placeholder="admin@example.com"></label><button class="primary" onclick="inviteAdmin()">Stuur admin-uitnodiging</button><p id="invite_status" class="muted"></p><hr><h3>Databestuur</h3><p class="muted">Gekoppel aan Supabase. Veranderinge word tussen toestelle gesinkroniseer.</p><button onclick="seedDemo()">Laai demo spanne</button><button onclick="exportData()">Voer plaaslike data uit</button><button onclick="importPrompt()">Voer plaaslike data in</button></section></div>`;
 }
 
 function matches(){const ms=activeMatches().filter(m=>filterStatus==='all'||m.status===filterStatus);return `<div class="title-row"><div><h2>Wedstryde</h2><p>Bestuur skedule, tellings, status en skeidsregter-toewysings.</p></div>${admin?'<button class="primary" onclick="openMatch()">+ Nuwe wedstryd</button>':''}</div><div class="filters"><select onchange="age=this.value;render()"><option ${age==='O/11'?'selected':''}>O/11</option><option ${age==='O/12'?'selected':''}>O/12</option></select><select onchange="pool=this.value;render()"><option ${pool==='All'?'selected':''}>All</option>${['A','B','C','D'].map(p=>`<option ${pool===p?'selected':''}>${p}</option>`).join('')}</select><select onchange="filterStatus=this.value;render()"><option value="all" ${filterStatus==='all'?'selected':''}>Alle statusse</option><option value="scheduled" ${filterStatus==='scheduled'?'selected':''}>Geskeduleer</option><option value="live" ${filterStatus==='live'?'selected':''}>Live</option><option value="completed" ${filterStatus==='completed'?'selected':''}>Voltooi</option></select></div><div class="list">${ms.length?ms.map(matchCard).join(''):empty('Geen wedstryde vir hierdie filter nie.')}</div>`}
 
 function teamLogo(t){return t.logoUrl?`<img src="${esc(t.logoUrl)}" alt="${esc(t.name)} logo">`:`<span>${esc((t.short||t.name).slice(0,2).toUpperCase())}</span>`}
 
-window.signIn=signIn;window.signOut=signOut;window.isAdminUser=isAdminUser;
+window.signIn=signIn;window.signOut=signOut;window.isAdminUser=isAdminUser;window.inviteAdmin=inviteAdmin;
