@@ -15,7 +15,7 @@ Tournament dates: **16–17 October 2026**.
 2. Run `supabase_patch.sql` once.
 3. Confirm Storage buckets `team-logos` and `tournament-assets` exist.
 4. Create your admin user in Supabase Authentication.
-5. Insert that user's UUID into `admin_users` with role `super_admin` and `active=true`.
+5. The SQL patch automatically adds `jago@banies.co.za` to `admin_users` when that Supabase Auth account exists.
 
 ## Frontend configuration
 Edit `config.js` with the Supabase project URL and **publishable** key only. Never put a service-role/secret key in the browser.

@@ -33,54 +33,89 @@ begin
   begin alter publication supabase_realtime add table public.tournament_settings; exception when duplicate_object then null; end;
 end $$;
 
--- Admin authentication + storage fix for the current schema.
--- admin_users uses user_id as the auth.users foreign key.
+-- Admin authentication + storage fix.
+-- This patch supports older installs where admin_users used "id" instead of "user_id".
 
-create or replace function public.is_baanbreker_admin()
-returns boolean
-language sql
-security definer
-set search_path = public
-stable
-as $$
-  select exists (
-    select 1 from public.admin_users
-    where user_id = auth.uid() and active = true
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='admin_users' AND column_name='id'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='admin_users' AND column_name='user_id'
+  ) THEN
+    ALTER TABLE public.admin_users RENAME COLUMN id TO user_id;
+  END IF;
+END $$;
+
+ALTER TABLE public.admin_users
+  ADD COLUMN IF NOT EXISTS active boolean DEFAULT true;
+ALTER TABLE public.admin_users
+  ADD COLUMN IF NOT EXISTS role text DEFAULT 'admin';
+
+-- Remove old policies that may already exist, then recreate them safely.
+DROP POLICY IF EXISTS "admins read own row" ON public.admin_users;
+CREATE POLICY "admins read own row"
+ON public.admin_users FOR SELECT TO authenticated
+USING (auth.uid() = user_id);
+
+CREATE OR REPLACE FUNCTION public.is_baanbreker_admin()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.admin_users
+    WHERE admin_users.user_id = auth.uid()
+      AND admin_users.active = true
   );
 $$;
 
-revoke all on function public.is_baanbreker_admin() from public;
-grant execute on function public.is_baanbreker_admin() to authenticated;
+REVOKE ALL ON FUNCTION public.is_baanbreker_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_baanbreker_admin() TO authenticated;
 
--- Make sure the supplied owner account is an administrator if the Auth account already exists.
-insert into public.admin_users (user_id, role, active)
-select id, 'admin', true
-from auth.users
-where lower(email) = lower('jago@banies.co.za')
-on conflict (user_id) do update set role='admin', active=true;
+-- Make the supplied owner account an administrator if the Auth account exists.
+INSERT INTO public.admin_users (user_id, role, active)
+SELECT id, 'admin', true
+FROM auth.users
+WHERE lower(email) = lower('jago@banies.co.za')
+ON CONFLICT (user_id) DO UPDATE
+SET role='admin', active=true;
 
-insert into storage.buckets (id, name, public)
-values ('team-logos', 'team-logos', true)
-on conflict (id) do update set public=true;
+-- Storage bucket.
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('team-logos', 'team-logos', true)
+ON CONFLICT (id) DO UPDATE SET public=true;
 
-drop policy if exists "Baanbreker team logos admin upload" on storage.objects;
-drop policy if exists "Baanbreker team logos admin update" on storage.objects;
-drop policy if exists "Baanbreker team logos admin delete" on storage.objects;
+DROP POLICY IF EXISTS "Baanbreker team logos public read" ON storage.objects;
+DROP POLICY IF EXISTS "Baanbreker team logos admin upload" ON storage.objects;
+DROP POLICY IF EXISTS "Baanbreker team logos admin update" ON storage.objects;
+DROP POLICY IF EXISTS "Baanbreker team logos admin delete" ON storage.objects;
+DROP POLICY IF EXISTS "Public can view team logos" ON storage.objects;
+DROP POLICY IF EXISTS "Admins can upload team logos" ON storage.objects;
+DROP POLICY IF EXISTS "Admins can update team logos" ON storage.objects;
+DROP POLICY IF EXISTS "Admins can delete team logos" ON storage.objects;
+DROP POLICY IF EXISTS "Team logos public read" ON storage.objects;
+DROP POLICY IF EXISTS "Team logos admin upload" ON storage.objects;
+DROP POLICY IF EXISTS "Team logos admin update" ON storage.objects;
+DROP POLICY IF EXISTS "Team logos admin delete" ON storage.objects;
 
-drop policy if exists "Baanbreker team logos public read" on storage.objects;
-create policy "Baanbreker team logos public read"
-on storage.objects for select to public
-using (bucket_id='team-logos');
+CREATE POLICY "Baanbreker team logos public read"
+ON storage.objects FOR SELECT TO public
+USING (bucket_id='team-logos');
 
-create policy "Baanbreker team logos admin upload"
-on storage.objects for insert to authenticated
-with check (bucket_id='team-logos' and public.is_baanbreker_admin());
+CREATE POLICY "Baanbreker team logos admin upload"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (bucket_id='team-logos' AND public.is_baanbreker_admin());
 
-create policy "Baanbreker team logos admin update"
-on storage.objects for update to authenticated
-using (bucket_id='team-logos' and public.is_baanbreker_admin())
-with check (bucket_id='team-logos' and public.is_baanbreker_admin());
+CREATE POLICY "Baanbreker team logos admin update"
+ON storage.objects FOR UPDATE TO authenticated
+USING (bucket_id='team-logos' AND public.is_baanbreker_admin())
+WITH CHECK (bucket_id='team-logos' AND public.is_baanbreker_admin());
 
-create policy "Baanbreker team logos admin delete"
-on storage.objects for delete to authenticated
-using (bucket_id='team-logos' and public.is_baanbreker_admin());
+CREATE POLICY "Baanbreker team logos admin delete"
+ON storage.objects FOR DELETE TO authenticated
+USING (bucket_id='team-logos' AND public.is_baanbreker_admin());
