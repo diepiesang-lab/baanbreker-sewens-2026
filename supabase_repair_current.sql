@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS public.match_events (
 );
 
 ALTER TABLE public.match_events ADD COLUMN IF NOT EXISTS period integer DEFAULT 1;
+-- Required by the live scoring event recorder; this also repairs older match_events tables.
 ALTER TABLE public.match_events ADD COLUMN IF NOT EXISTS clock_seconds integer DEFAULT 0;
 ALTER TABLE public.match_events ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL;
 ALTER TABLE public.match_events ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
