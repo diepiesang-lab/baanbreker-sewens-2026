@@ -1,38 +1,27 @@
-# Laerskool Baanbreker Sewens 2026 — Online Tournament System
+# Laerskool Baanbreker Sewens 2026
 
-Tournament dates: **16–17 October 2026**.
+Tournament web app for Laerskool Baanbreker Sewens 2026.
 
-## Live stack
-- Static frontend: `index.html`, `styles.css`, `app.js`
-- Supabase Auth for admin login
-- Supabase Postgres for teams, matches, referees, allocations and settings
-- Supabase Storage bucket `team-logos` for individual team logos
-- Supabase Realtime for live score / fixture / referee updates
-- Vercel-ready static deployment
+## Deployment
+Upload the CONTENTS of this folder to the GitHub repository root so `index.html` is at the deployed root.
 
-## Supabase setup
-1. Run the original `supabase.sql` if you have not already.
-2. Run `supabase_patch.sql` once.
-3. Confirm Storage buckets `team-logos` and `tournament-assets` exist.
-4. Create your admin user in Supabase Authentication.
-5. The SQL patch automatically adds `jago@banies.co.za` to `admin_users` when that Supabase Auth account exists.
+## Supabase
+Run **only** `supabase_repair_current.sql` once in Supabase SQL Editor. It adds the live-clock and match-event columns safely, including `match_events.period`.
 
-## Frontend configuration
-Edit `config.js` with the Supabase project URL and **publishable** key only. Never put a service-role/secret key in the browser.
+Do not expose a Supabase service-role key in the browser.
 
-## Local test
-Open `index.html` or serve the folder with a simple static web server.
+## Match clock
+- 7 minutes per half (420 seconds)
+- Start / pause / resume
+- First half automatically stops at 7:00
+- Admin starts the second half
+- Second half automatically ends the match at 7:00
+- Live score events are stored with period and clock time
+- Undo last scoring event
+- Realtime updates across devices
 
-## Vercel
-Import this folder/repository into Vercel. No server-side runtime is required for the frontend.
-
-## Admin capabilities
-- Secure email/password admin login
-- Team create/edit and individual logo upload
-- Referee create/edit
-- One referee per fixture (no assistant referees)
-- Fixture create/edit/delete
-- Live score/status updates
-- Tournament branding and colours
-- Public big-screen view
-- Live multi-device sync through Supabase Realtime
+## Scoring
+- Try: 5
+- Conversion: 2
+- Penalty: 3
+- Drop goal: 3
