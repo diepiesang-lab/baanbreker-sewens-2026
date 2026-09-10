@@ -83,8 +83,8 @@ CREATE OR REPLACE FUNCTION public.record_match_event(
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE
   m public.matches%rowtype;
-  s integer;
-  pts integer;
+  event_clock integer;
+  event_period integer;
 BEGIN
   IF NOT public.is_baanbreker_admin() THEN RAISE EXCEPTION 'Admin toegang benodig'; END IF;
   IF p_points NOT IN (2,3,5) THEN RAISE EXCEPTION 'Ongeldige puntetelling'; END IF;
@@ -95,17 +95,21 @@ BEGIN
   IF m.status <> 'live' THEN RAISE EXCEPTION 'Wedstryd is nie LIVE nie'; END IF;
   IF p_team_id IS NULL OR p_team_id NOT IN (m.home_id,m.away_id) THEN RAISE EXCEPTION 'Span behoort nie aan hierdie wedstryd nie'; END IF;
 
-  s:=greatest(0,least(420,coalesce(m.clock_seconds,0)+CASE
+  -- Capture the current clock ONLY for the event history.
+  -- Never write this value back to matches.clock_seconds while the clock is running.
+  event_clock:=greatest(0,least(420,coalesce(m.clock_seconds,0)+CASE
     WHEN coalesce(m.clock_running,false) AND m.clock_started_at IS NOT NULL
     THEN floor(extract(epoch from(now()-m.clock_started_at)))::integer ELSE 0 END));
+  event_period:=greatest(1,least(2,coalesce(m.period,1)));
 
   INSERT INTO public.match_events(match_id,team_id,event_type,points,period,clock_seconds,created_by)
-  VALUES(p_match_id,p_team_id,p_event_type,p_points,greatest(1,least(2,coalesce(m.period,1))),s,auth.uid());
+  VALUES(p_match_id,p_team_id,p_event_type,p_points,event_period,event_clock,auth.uid());
 
+  -- Update SCORE ONLY. Timer state remains untouched.
   IF p_team_id=m.home_id THEN
-    UPDATE public.matches SET home_score=coalesce(home_score,0)+p_points,clock_seconds=s,updated_at=now() WHERE id=p_match_id;
+    UPDATE public.matches SET home_score=coalesce(home_score,0)+p_points,updated_at=now() WHERE id=p_match_id;
   ELSE
-    UPDATE public.matches SET away_score=coalesce(away_score,0)+p_points,clock_seconds=s,updated_at=now() WHERE id=p_match_id;
+    UPDATE public.matches SET away_score=coalesce(away_score,0)+p_points,updated_at=now() WHERE id=p_match_id;
   END IF;
 END; $$;
 

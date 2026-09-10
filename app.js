@@ -122,27 +122,83 @@ async function startSecondHalf(id){if(!admin)return;const m=data.matches.find(x=
 async function pauseMatch(id){if(!admin)return;const m=data.matches.find(x=>x.id===id);if(!m)return;const sec=elapsed(m);try{if(online){const q=await sb.from('matches').update({clock_seconds:sec,clock_running:false,clock_started_at:null}).eq('id',id);if(q.error)throw q.error;await refresh()}else{m.clockSeconds=sec;m.clockRunning=false;m.clockStartedAt=null;render()}}catch(e){alert(e.message)}}
 async function endMatch(id){if(!admin)return;const m=data.matches.find(x=>x.id===id);if(!m)return;try{if(online){const q=await sb.from('matches').update({clock_seconds:Math.min(420,elapsed(m)),clock_running:false,clock_started_at:null,status:'completed',completed_at:new Date().toISOString()}).eq('id',id);if(q.error)throw q.error;await refresh()}else{m.clockSeconds=420;m.clockRunning=false;m.status='completed';render()}}catch(e){alert(e.message)}}
 async function resetMatch(id){if(!admin||!confirm('Reset wedstryd en telling?'))return;try{if(online){const q=await sb.from('matches').update({home_score:0,away_score:0,status:'scheduled',period:0,clock_seconds:0,clock_running:false,clock_started_at:null,completed_at:null}).eq('id',id);if(q.error)throw q.error;const d=await sb.from('match_events').delete().eq('match_id',id);if(d.error)throw d.error;await refresh()}else{const m=data.matches.find(x=>x.id===id);if(m){Object.assign(m,{homeScore:0,awayScore:0,status:'scheduled',period:0,clockSeconds:0,clockRunning:false,clockStartedAt:null});data.events=data.events.filter(e=>e.matchId!==id);render()}}}catch(e){alert(e.message)}}
+const scoreBusy=new Set();
 async function recordScore(matchId,teamId,type,points){
   if(!admin)return;
   const m=data.matches.find(x=>x.id===matchId);
   if(!m||m.status!=='live')return alert('Wedstryd moet LIVE wees voordat punte aangeteken kan word.');
+  if(!teamId||teamId==='undefined'||teamId==='null')return alert('Span kon nie bepaal word nie.');
+  const key=`${matchId}:${teamId}`;
+  if(scoreBusy.has(key))return;
+  scoreBusy.add(key);
   try{
+    const sec=elapsed(m);
     if(online){
+      // Preferred: atomic RPC. The RPC records the event timestamp but DOES NOT
+      // alter clock_seconds/clock_started_at, so scoring can never add time.
       let q=await sb.rpc('record_match_event',{p_match_id:matchId,p_team_id:teamId,p_event_type:type,p_points:points});
-      if(q.error && /period|record_match_event/i.test(q.error.message||'')){
-        const sec=elapsed(m);
-        const ins=await sb.from('match_events').insert({match_id:matchId,team_id:teamId,event_type:type,points:points,clock_seconds:sec,created_by:user?.id||null});
-        if(ins.error)throw ins.error;
-        const patch=teamId===m.homeId?{home_score:(m.homeScore||0)+points,clock_seconds:sec}:{away_score:(m.awayScore||0)+points,clock_seconds:sec};
-        const up=await sb.from('matches').update(patch).eq('id',matchId);if(up.error)throw up.error;
-      }else if(q.error)throw q.error;
+      if(q.error){
+        // Compatibility fallback for older match_events schemas. Intentionally
+        // omit "period" so scoring still works if that column has not been added.
+        const ins=await sb.from('match_events').insert({
+          match_id:matchId,
+          team_id:teamId,
+          event_type:type,
+          points:points,
+          clock_seconds:sec,
+          created_by:user?.id||null
+        });
+        if(ins.error)throw q.error;
+        const patch=teamId===m.homeId
+          ? {home_score:(m.homeScore||0)+points}
+          : {away_score:(m.awayScore||0)+points};
+        const up=await sb.from('matches').update(patch).eq('id',matchId);
+        if(up.error)throw up.error;
+      }
       await refresh();render();
     }else{
-      const s=elapsed(m);if(teamId===m.homeId)m.homeScore=(m.homeScore||0)+points;else if(teamId===m.awayId)m.awayScore=(m.awayScore||0)+points;data.events.push({id:uuid(),matchId,teamId,type,points,period:m.period,clockSeconds:s});render();
+      if(teamId===m.homeId)m.homeScore=(m.homeScore||0)+points;
+      else if(teamId===m.awayId)m.awayScore=(m.awayScore||0)+points;
+      data.events.push({id:uuid(),matchId,teamId,type,points,period:m.period,clockSeconds:sec});
+      render();
     }
-  }catch(e){alert('Telling kon nie gestoor word nie: '+(e?.message||e))}
+  }catch(e){
+    alert('Telling kon nie gestoor word nie: '+(e?.message||e));
+  }finally{
+    scoreBusy.delete(key);
+  }
 }
-async function undoEvent(matchId){if(!admin)return;try{if(online){const q=await sb.rpc('undo_last_match_event',{p_match_id:matchId});if(q.error)throw q.error;await refresh()}else{const e=data.events.filter(x=>x.matchId===matchId).pop();if(!e)return;const m=data.matches.find(x=>x.id===matchId);if(e.teamId===m.homeId)m.homeScore=Math.max(0,(m.homeScore||0)-e.points);if(e.teamId===m.awayId)m.awayScore=Math.max(0,(m.awayScore||0)-e.points);data.events=data.events.filter(x=>x.id!==e.id);render()}}catch(e){alert(e.message)}}
+async function undoEvent(matchId){
+  if(!admin)return;
+  try{
+    if(online){
+      const q=await sb.rpc('undo_last_match_event',{p_match_id:matchId});
+      if(q.error){
+        const ev=await sb.from('match_events').select('id,team_id,points,created_at')
+          .eq('match_id',matchId).order('created_at',{ascending:false}).limit(1).maybeSingle();
+        if(ev.error)throw q.error;
+        if(!ev.data)return alert('Geen telling om te onthou nie.');
+        const m=data.matches.find(x=>x.id===matchId);
+        const d=await sb.from('match_events').delete().eq('id',ev.data.id);
+        if(d.error)throw d.error;
+        const patch=ev.data.team_id===m.homeId
+          ? {home_score:Math.max(0,(m.homeScore||0)-Number(ev.data.points||0))}
+          : {away_score:Math.max(0,(m.awayScore||0)-Number(ev.data.points||0))};
+        const up=await sb.from('matches').update(patch).eq('id',matchId);
+        if(up.error)throw up.error;
+      }
+      await refresh();render();
+    }else{
+      const e=data.events.filter(x=>x.matchId===matchId).pop();
+      if(!e)return;
+      const m=data.matches.find(x=>x.id===matchId);
+      if(e.teamId===m.homeId)m.homeScore=Math.max(0,(m.homeScore||0)-e.points);
+      if(e.teamId===m.awayId)m.awayScore=Math.max(0,(m.awayScore||0)-e.points);
+      data.events=data.events.filter(x=>x.id!==e.id);
+      render();
+    }
+  }catch(e){alert('Kon laaste telling nie ongedaan maak nie: '+(e?.message||e))}
+}
 async function deleteMatch(id,btn){if(!admin||!confirm('Verwyder hierdie wedstryd?'))return;try{if(online){const q=await sb.from('matches').delete().eq('id',id);if(q.error)throw q.error;await refresh()}else{data.matches=data.matches.filter(m=>m.id!==id);render()}btn.closest('.modal')?.remove();render()}catch(e){alert(e.message)}}
 let tickBusy=false;
 async function tick(){
