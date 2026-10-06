@@ -28,6 +28,7 @@
   function setMsg(html,type=''){const e=get('sched-msg');if(e){e.className='schedule-message '+type;e.innerHTML=html}}
 
   async function loadTeams(){
+    await loadRefs();
     if(!online){ teams=[]; loaded=true; renderSchedule(); return; }
     setMsg('Laai aktiewe spanne…');
     const r=await sb.from('teams').select('id,name,short,age,pool,active,logo_url').eq('active',true).order('age').order('pool').order('name');
@@ -106,7 +107,7 @@
 
     // Greedy placement. It prioritises games whose teams have played least recently,
     // while preventing simultaneous games and optional back-to-back matches.
-    const last={}, used={}, refUsed={};
+    const last={}, used={}, teamSlot={}, refUsed={};
     const result=[];
     for(const game of games){
       let placed=null;
@@ -116,6 +117,7 @@
           const k=key+'|'+field;
           if(used[k])continue;
           const a=game.home.id,b=game.away.id;
+          if(teamSlot[a]===key || teamSlot[b]===key) continue;
           if((last[a]&&last[a].date===slot.date&&slot.minute-last[a].minute<state.duration+state.minRest) ||
              (last[b]&&last[b].date===slot.date&&slot.minute-last[b].minute<state.duration+state.minRest)) continue;
           const ref=state.autoRefs ? refs.find(r=>!refUsed[key+'|'+r.id]) : null;
@@ -131,6 +133,7 @@
           const key=slot.date+'|'+slot.time;
           for(const field of fields){
             const k=key+'|'+field;if(used[k])continue;
+            if(teamSlot[game.home.id]===key || teamSlot[game.away.id]===key)continue;
             const ref=state.autoRefs ? refs.find(r=>!refUsed[key+'|'+r.id]) : null;
             if(state.autoRefs && refs.length && !ref)continue;
             placed={...game,date:slot.date,time:slot.time,minute:slot.minute,field,refId:ref?.id||null};break;
@@ -146,6 +149,8 @@
       used[key+'|'+placed.field]=true;
       last[placed.home.id]={date:placed.date,minute:placed.minute};
       last[placed.away.id]={date:placed.date,minute:placed.minute};
+      teamSlot[placed.home.id]=key;
+      teamSlot[placed.away.id]=key;
       if(placed.refId)refUsed[key+'|'+placed.refId]=true;
       result.push(placed);
     }
@@ -155,7 +160,7 @@
   }
 
   async function saveGenerated(){
-    if(!adminOK())return;
+    if(!(await adminOK()))return;
     if(!preview.length){setMsg('Genereer eers die skedule.','error');return}
     const btn=get('s_save');btn.disabled=true;
     try{
@@ -177,10 +182,12 @@
     finally{btn.disabled=false}
   }
 
-  function adminOK(){
+  async function adminOK(){
     if(!online){setMsg('Supabase is nie gekoppel nie.','error');return false}
-    // The schedule page is only exposed through the existing Admin button when signed in.
-    // This second check protects direct navigation.
+    const s=await sb.auth.getSession();
+    if(!s.data.session){setMsg('Meld eers aan as Admin.','error');return false}
+    const a=await sb.rpc('is_baanbreker_admin');
+    if(a.error || a.data!==true){setMsg('Admin-toegang benodig om die skedule te bestuur.','error');return false}
     return true;
   }
 
