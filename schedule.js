@@ -38,7 +38,10 @@
   function selectedTeams(){return teams.filter(t=>get('team_'+t.id)?.checked)}
   function ageTeams(age){return selectedTeams().filter(t=>t.age===age)}
   function poolCount(age){
-    const n=ageTeams(age).length, per=Math.max(2,Number(state.teamsPerPool)||4);
+    const n=ageTeams(age).length;
+    if(age==='O/11') return n?2:0;
+    if(age==='O/12') return n?2:0;
+    const per=Math.max(2,Number(state.teamsPerPool)||4);
     return n?Math.ceil(n/per):0;
   }
   function poolName(i){return String.fromCharCode(65+i)}
@@ -48,7 +51,8 @@
       const ts=ageTeams(age).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
       const count=poolCount(age);
       poolPlan[age]=Array.from({length:count},()=>[]);
-      ts.forEach((t,i)=>poolPlan[age][i%count].push(t));
+      const target=age==='O/11'?7:age==='O/12'?5:Math.ceil(ts.length/count);
+      ts.forEach((t,i)=>poolPlan[age][Math.min(Math.floor(i/target),count-1)].push(t));
     });
   }
   function poolGroups(){
@@ -90,8 +94,11 @@
     state.autoRefs=checked('s_refs');state.replace=checked('s_replace');saveState();
     const groups=poolGroups();
     if(!groups.length){msg('Select at least two teams in an age group.','error');return}
+    if(ageTeams('O/11').length!==14 || ageTeams('O/12').length!==10){msg('This tournament requires 14 O/11 teams and 10 O/12 teams: 2 pools of 7 and 2 pools of 5.','error');return}
     const games=[];
     groups.forEach(g=>roundRobin(g.teams).forEach((m,i)=>games.push({...m,age:g.age,pool:g.pool,round:'Pool',group:g.age+'|'+g.pool,number:i+1})));
+const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 || pools.some(p=>p.length<(age==='O/11'?6:5))) return; const paths=[['Cup',1],['Plate',3],['Bowl',5]]; paths.forEach(([comp,pos])=>{ games.push({age,pool:'Playoff',round:comp+' Semi 1',group:'playoff',playoff:true,competition:comp,placeholderHome:age+' Pool A '+pos+'th',placeholderAway:age+' Pool B '+(pos+1)+'th'}); games.push({age,pool:'Playoff',round:comp+' Semi 2',group:'playoff',playoff:true,competition:comp,placeholderHome:age+' Pool B '+pos+'th',placeholderAway:age+' Pool A '+(pos+1)+'th'}); games.push({age,pool:'Playoff',round:comp+' Final',group:'playoff',playoff:true,competition:comp,placeholderHome:comp+' Semi 1 winner',placeholderAway:comp+' Semi 2 winner'}); }); };
+    playoffForAge('O/11'); playoffForAge('O/12');
     const sl=slots(),fields=Array.from({length:state.fields},(_,i)=>String.fromCharCode(65+i));
     if(!sl.length){msg('No usable time slots. Check your day times.','error');return}
     if(games.length>sl.length*fields.length){msg('<b>'+games.length+' matches</b> need '+(sl.length*fields.length)+' available field slots. Add fields/time or reduce duration.','error');return}
@@ -102,9 +109,10 @@
         const key=slot.date+'|'+slot.time;
         for(const field of fields.sort((a,b)=>{const preferred=game.age==='O/12'?'A':'B';return (a===preferred? -1:0)-(b===preferred? -1:0)})){
           const k=key+'|'+field;if(used[k])continue;
-          if(teamSlot[game.home.id]===key||teamSlot[game.away.id]===key)continue;
-          if((last[game.home.id]&&last[game.home.id].date===slot.date&&slot.minute-last[game.home.id].minute<state.duration+state.minRest)||
-             (last[game.away.id]&&last[game.away.id].date===slot.date&&slot.minute-last[game.away.id].minute<state.duration+state.minRest))continue;
+          if(game.home?.id && teamSlot[game.home.id]===key)continue;
+          if(game.away?.id && teamSlot[game.away.id]===key)continue;
+          if((game.home?.id && last[game.home.id]&&last[game.home.id].date===slot.date&&slot.minute-last[game.home.id].minute<state.duration+state.minRest)||
+             (game.away?.id && last[game.away.id]&&last[game.away.id].date===slot.date&&slot.minute-last[game.away.id].minute<state.duration+state.minRest))continue;
           const ref=state.autoRefs?refs.find(r=>!refUsed[key+'|'+r.id]):null;
           if(state.autoRefs&&refs.length&&!ref)continue;
           placed={...game,date:slot.date,time:slot.time,minute:slot.minute,field,refId:ref?.id||null};break;
@@ -124,8 +132,8 @@
       }
       if(!placed){msg('Could not place every match. Reduce rest time/duration or add fields.','error');preview=[];renderSchedule();return}
       const key=placed.date+'|'+placed.time;used[key+'|'+placed.field]=true;
-      last[placed.home.id]={date:placed.date,minute:placed.minute};last[placed.away.id]={date:placed.date,minute:placed.minute};
-      teamSlot[placed.home.id]=key;teamSlot[placed.away.id]=key;if(placed.refId)refUsed[key+'|'+placed.refId]=true;result.push(placed);
+      if(placed.home?.id){last[placed.home.id]={date:placed.date,minute:placed.minute};teamSlot[placed.home.id]=key;}
+      if(placed.away?.id){last[placed.away.id]={date:placed.date,minute:placed.minute};teamSlot[placed.away.id]=key;}if(placed.refId)refUsed[key+'|'+placed.refId]=true;result.push(placed);
     }
     preview=result.sort((a,b)=>(a.date+a.time+a.field).localeCompare(b.date+b.time+b.field));
     renderSchedule();msg('<b>'+preview.length+' matches</b> generated. Review the schedule before saving.','success');
@@ -142,7 +150,7 @@
     const b=get('s_save');if(b)b.disabled=true;
     try{
       if(state.replace){const d=await sb.from('matches').delete().eq('status','scheduled');if(d.error)throw d.error}
-      const rows=preview.map(m=>({age:m.age,pool:m.pool,round:m.round,match_date:m.date,match_time:m.time+':00',field:m.field,home_id:m.home.id,away_id:m.away.id,referee_id:m.refId||null,home_score:0,away_score:0,status:'scheduled',notes:'Generated by Baanbreker two-day schedule builder'}));
+      const rows=preview.map(m=>({age:m.age,pool:m.pool,round:m.round,match_date:m.date,match_time:m.time+':00',field:m.field,home_id:m.home?.id||null,away_id:m.away?.id||null,referee_id:m.refId||null,home_score:0,away_score:0,status:'scheduled',notes:m.playoff ? ('PLAYOFF PLACEHOLDER | '+m.placeholderHome+' vs '+m.placeholderAway) : 'Generated by Baanbreker two-day schedule builder'}));
       const r=await sb.from('matches').insert(rows);if(r.error)throw r.error;
       msg(rows.length+' matches saved to Supabase.','success');if(window.go)window.go('matches');
     }catch(e){msg('Could not save schedule: '+esc(e.message||e),'error')}finally{if(b)b.disabled=false}
@@ -192,7 +200,7 @@
   function renderSchedule(){
     const app=get('app');if(!app||!window.__baanbrekerScheduleActive)return;
     const grouped={};preview.forEach(m=>(grouped[m.date]??=[]).push(m));
-    const previewHtml=preview.length?Object.entries(grouped).map(([date,ms])=>'<section class="schedule-preview"><div class="preview-head"><div><span>'+esc(dateLabel(date))+'</span><h3>'+ms.length+' matches</h3></div><div class="preview-badge">'+esc(state.fields)+' fields</div></div><div class="schedule-table-wrap"><table class="schedule-table"><thead><tr><th>Time</th><th>Field</th><th>Age</th><th>Pool</th><th>Home</th><th>Score</th><th>Away</th><th>Referee</th></tr></thead><tbody>'+ms.map(m=>'<tr><td><b>'+esc(m.time)+'</b></td><td>Field '+esc(m.field)+'</td><td>'+esc(m.age)+'</td><td><span class="pool-pill">'+esc(m.pool)+'</span></td><td><b>'+esc(short(m.home))+'</b></td><td>—</td><td><b>'+esc(short(m.away))+'</b></td><td>'+esc(refs.find(r=>r.id===m.refId)?.name||'—')+'</td></tr>').join('')+'</tbody></table></div></section>').join(''):'<section class="schedule-preview empty"><h3>Your schedule preview will appear here</h3><p>Select teams, configure pools and generate the schedule.</p></section>';
+    const previewHtml=preview.length?Object.entries(grouped).map(([date,ms])=>'<section class="schedule-preview"><div class="preview-head"><div><span>'+esc(dateLabel(date))+'</span><h3>'+ms.length+' matches</h3></div><div class="preview-badge">'+esc(state.fields)+' fields</div></div><div class="schedule-table-wrap"><table class="schedule-table"><thead><tr><th>Time</th><th>Field</th><th>Age</th><th>Pool</th><th>Home</th><th>Score</th><th>Away</th><th>Referee</th></tr></thead><tbody>'+ms.map(m=>'<tr><td><b>'+esc(m.time)+'</b></td><td>Field '+esc(m.field)+'</td><td>'+esc(m.age)+'</td><td><span class="pool-pill">'+esc(m.pool)+'</span></td><td><b>'+esc(m.home?.id?short(m.home):(m.placeholderHome||'TBD'))+'</b></td><td>—</td><td><b>'+esc(m.away?.id?short(m.away):(m.placeholderAway||'TBD'))+'</b></td><td>'+esc(refs.find(r=>r.id===m.refId)?.name||'—')+'</td></tr>').join('')+'</tbody></table></div></section>').join(''):'<section class="schedule-preview empty"><h3>Your schedule preview will appear here</h3><p>Select teams, configure pools and generate the schedule.</p></section>';
     app.innerHTML='<aside class="sidebar"><div class="brand"><div class="brand-logo image-logo"><img src="baanbreker-logo.png" alt=""></div><div><b>Laerskool Baanbreker Sewens</b><small>2026 Rugby Sewens Toernooi</small></div></div><div class="nav"><button onclick="scheduleBack()">← Dashboard</button><button class="active">Schedule Builder</button></div><div class="side-foot"><span class="dot '+(online?'live':'demo')+'"></span>'+(online?'Online database':'Demo mode')+'</div></aside><section class="page schedule-page"><header><div class="header-brand"><img class="header-logo" src="baanbreker-logo.png" alt=""><div><span class="eyebrow">16–17 October 2026 · Laerskool Baanbreker</span><h1>Schedule Builder</h1><p>Set the teams. The system calculates the pools and builds the fixture list.</p></div></div></header><main><div class="schedule-topbar"><div><h2>1. Choose teams</h2><p>Select the teams that should participate. Pools are calculated automatically.</p></div><div class="top-actions"><button onclick="loadScheduleTeams()">↻ Refresh</button><button onclick="toggleScheduleTeams(true)">Select all</button><button onclick="toggleScheduleTeams(false)">Clear</button></div></div><div id="team-summary" class="schedule-summary"></div><section class="team-picker" id="schedule-teams"><div class="empty">Loading teams…</div></section>'+controls()+'<div class="schedule-topbar preview-title"><div><h2>4. Schedule preview</h2><p>Check the generated fixtures before saving them to the tournament.</p></div></div>'+previewHtml+'</main></section>';
     renderTeams();updatePoolUi();
   }
