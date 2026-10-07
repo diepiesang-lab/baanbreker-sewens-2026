@@ -96,8 +96,20 @@
     if(!groups.length){msg('Select at least two teams in an age group.','error');return}
     if(ageTeams('O/11').length!==14 || ageTeams('O/12').length!==10){msg('This tournament requires 14 O/11 teams and 10 O/12 teams: 2 pools of 7 and 2 pools of 5.','error');return}
     const games=[];
-    groups.forEach(g=>roundRobin(g.teams).forEach((m,i)=>games.push({...m,age:g.age,pool:g.pool,round:'Pool',group:g.age+'|'+g.pool,number:i+1})));
-    games.sort((a,b)=>(a.age==='O/12'?0:1)-(b.age==='O/12'?0:1));
+    const fixturesByAge={};
+    groups.forEach(g=>{
+      (fixturesByAge[g.age]??=[]).push({
+        pool:g.pool,
+        fixtures:roundRobin(g.teams).map((m,i)=>({...m,age:g.age,pool:g.pool,round:'Pool',group:g.age+'|'+g.pool,number:i+1}))
+      });
+    });
+    ['O/12','O/11'].forEach(age=>{
+      const pools=fixturesByAge[age]||[];
+      const maxMatches=Math.max(0,...pools.map(p=>p.fixtures.length));
+      for(let i=0;i<maxMatches;i++){
+        pools.forEach(p=>{if(p.fixtures[i])games.push(p.fixtures[i])});
+      }
+    });
 const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 || pools.some(p=>p.length<(age==='O/11'?6:5))) return; const paths=[['Bowl',5],['Plate',3],['Cup',1]]; paths.forEach(([comp,pos])=>{ games.push({age,pool:'Playoff',round:comp+' Semi 1',group:'playoff',playoff:true,competition:comp,placeholderHome:age+' Pool A '+pos+'th',placeholderAway:age+' Pool B '+(pos+1)+'th'}); games.push({age,pool:'Playoff',round:comp+' Semi 2',group:'playoff',playoff:true,competition:comp,placeholderHome:age+' Pool B '+pos+'th',placeholderAway:age+' Pool A '+(pos+1)+'th'}); games.push({age,pool:'Playoff',round:comp+' Final',group:'playoff',playoff:true,competition:comp,placeholderHome:comp+' Semi 1 winner',placeholderAway:comp+' Semi 2 winner'}); }); };
     playoffForAge('O/11'); playoffForAge('O/12');
     const sl=slots(),fields=Array.from({length:state.fields},(_,i)=>String.fromCharCode(65+i));
@@ -110,6 +122,9 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
 
     const last={},used={},teamSlot={},refUsed={},result=[];
     const remaining=games.slice();
+    const cupFinalCount=games.filter(g=>g.playoff && g.competition==='Cup' && g.round==='Cup Final').length;
+    const cupFinalSlotCount=cupFinalCount?Math.ceil(cupFinalCount/fields.length):0;
+    const cupFinalSlotKeys=new Set(sl.slice(-cupFinalSlotCount).map(slot=>slot.date+'|'+slot.time));
 
     function canPlace(game,slot,key){
       if(game.home?.id && teamSlot[game.home.id]===key)return false;
@@ -138,17 +153,28 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
     // After all O/12 matches have been scheduled, O/11 may use A as well.
     for(const slot of sl){
       const key=slot.date+'|'+slot.time;
+      const cupFinalSlot=cupFinalSlotKeys.has(key);
       const poolStageActive=remaining.some(g=>g.round==='Pool');
       const o12PoolPhaseActive=remaining.some(g=>g.age==='O/12' && g.round==='Pool');
-      const eligibleInCurrentPhase=g=>!poolStageActive || g.round==='Pool';
+      const cupSemisStillWaiting=remaining.some(g=>g.playoff && g.competition==='Cup' && g.round.includes('Semi'));
+      const eligibleInCurrentPhase=g=>{
+        if(cupFinalSlot) return !poolStageActive && !cupSemisStillWaiting && g.playoff && g.competition==='Cup' && g.round==='Cup Final';
+        if(poolStageActive && g.round!=='Pool') return false;
+        return !(g.playoff && g.competition==='Cup' && g.round==='Cup Final');
+      };
       const o12=o12PoolPhaseActive?remaining.find(g=>g.age==='O/12' && g.round==='Pool' && canPlace(g,slot,key)):null;
       if(o12 && fields.includes('A') && !used[key+'|A']){
         if(placeGame(o12,slot,'A')) remaining.splice(remaining.indexOf(o12),1);
       }
 
-      const o11=remaining.find(g=>g.age==='O/11' && eligibleInCurrentPhase(g) && canPlace(g,slot,key));
-      if(o11 && fields.includes('B') && !used[key+'|B']){
-        if(placeGame(o11,slot,'B')) remaining.splice(remaining.indexOf(o11),1);
+      if(o12PoolPhaseActive){
+        const o11=remaining.find(g=>g.age==='O/11' && eligibleInCurrentPhase(g) && canPlace(g,slot,key));
+        if(o11 && fields.includes('B') && !used[key+'|B']){
+          if(placeGame(o11,slot,'B')) remaining.splice(remaining.indexOf(o11),1);
+        }
+      } else if(fields.includes('A') && !used[key+'|A']){
+        const o11a=remaining.find(g=>g.age==='O/11' && eligibleInCurrentPhase(g) && canPlace(g,slot,key));
+        if(o11a && placeGame(o11a,slot,'A')) remaining.splice(remaining.indexOf(o11a),1);
       }
 
       // Other fields can be used without breaking the A/B priority.
@@ -160,12 +186,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
         }
       }
 
-      // Release Field A from the next slot after O/12 pool play clears.
-      // O/12 playoff placeholders do not keep the pool-stage reservation active.
-      if(!o12PoolPhaseActive && fields.includes('A') && !used[key+'|A']){
-        const o11a=remaining.find(g=>g.age==='O/11' && eligibleInCurrentPhase(g) && canPlace(g,slot,key));
-        if(o11a) { if(placeGame(o11a,slot,'A'))remaining.splice(remaining.indexOf(o11a),1); }
-      }
+      // O/11 receives Field A once O/12 pool play has cleared.
 
       // Fill any still-free fields, while retaining the preferred A/B choices above.
       for(const field of fields){
