@@ -138,6 +138,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
     // After all O/12 matches have been scheduled, O/11 may use A as well.
     for(const slot of sl){
       const key=slot.date+'|'+slot.time;
+      const o12PoolPhaseActive=remaining.some(g=>g.age==='O/12' && g.round==='Pool');
       const o12=remaining.find(g=>g.age==='O/12' && canPlace(g,slot,key));
       if(o12 && fields.includes('A') && !used[key+'|A']){
         if(placeGame(o12,slot,'A')) remaining.splice(remaining.indexOf(o12),1);
@@ -157,10 +158,9 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
         }
       }
 
-      // Field A is released to O/11 after O/12 pool play is fully scheduled.
+      // Release Field A from the next slot after O/12 pool play clears.
       // O/12 playoff placeholders do not keep the pool-stage reservation active.
-      const o12PoolStillWaiting=remaining.some(g=>g.age==='O/12' && g.round==='Pool');
-      if(!o12PoolStillWaiting && fields.includes('A') && !used[key+'|A']){
+      if(!o12PoolPhaseActive && fields.includes('A') && !used[key+'|A']){
         const o11a=remaining.find(g=>g.age==='O/11' && canPlace(g,slot,key));
         if(o11a) { if(placeGame(o11a,slot,'A'))remaining.splice(remaining.indexOf(o11a),1); }
       }
