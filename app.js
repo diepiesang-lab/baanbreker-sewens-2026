@@ -252,7 +252,7 @@ async function tick(){
   for(const m of live){
     const sec=elapsed(m);
     document.querySelectorAll('#score-'+m.id+' .live-clock').forEach(el=>el.textContent=fmtClock(sec));
-    if(m.id && location.hash==='#screen'){const screenClock=document.getElementById('screen-game-'+m.id)?.querySelector('.screen-game-time');if(screenClock)screenClock.textContent=fmtClock(sec)}
+    if(m.id && view==='screen'){const screenClock=document.getElementById('screen-game-'+m.id)?.querySelector('.screen-game-time');if(screenClock)screenClock.textContent=fmtClock(sec)}
     if(sec>=420 && !tickBusy){
       tickBusy=true;
       try{
