@@ -124,8 +124,9 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
     const last={},used={},teamSlot={},refUsed={},result=[];
     const remaining=games.slice();
     const cupFinalCount=games.filter(g=>g.playoff && g.competition==='Cup' && g.round==='Cup Final').length;
-    const cupFinalSlotCount=cupFinalCount?Math.ceil(cupFinalCount/fields.length):0;
-    const cupFinalSlotKeys=new Set(sl.slice(-cupFinalSlotCount).map(slot=>slot.date+'|'+slot.time));
+    const finalSlotCapacity=state.autoRefs&&refs.length?Math.min(fields.length,refs.length):fields.length;
+    const cupFinalSlotCount=cupFinalCount?Math.ceil(cupFinalCount/finalSlotCapacity):0;
+    const cupFinalSlotKeys=new Set(cupFinalSlotCount?sl.slice(-cupFinalSlotCount).map(slot=>slot.date+'|'+slot.time):[]);
 
     function canPlace(game,slot,key){
       if(game.home?.id && teamSlot[game.home.id]===key)return false;
