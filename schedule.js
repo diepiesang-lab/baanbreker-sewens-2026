@@ -27,11 +27,11 @@
     if(!online){teams=[];refs=[];loaded=true;renderSchedule();return}
     msg('Loading teams and referees…');
     const [tr,rr]=await Promise.all([
-      sb.from('teams').select('id,name,short,age,active,logo_url').eq('active',true).order('age').order('name'),
+      sb.from('teams').select('id,name,short,age,pool,active,logo_url').eq('active',true).order('age').order('name'),
       sb.from('referees').select('id,name,active').eq('active',true).order('name')
     ]);
     if(tr.error){msg('Could not load teams: '+esc(tr.error.message),'error');return}
-    teams=(tr.data||[]).filter(t=>t.id).map(t=>({...t,short:t.short||'',logo_url:t.logo_url||''}));
+    teams=(tr.data||[]).filter(t=>t.id).map(t=>({...t,short:t.short||'',pool:String(t.pool||'').toUpperCase(),logo_url:t.logo_url||''}));
     refs=rr.error?[]:(rr.data||[]);
     loaded=true; buildPoolPlan(); renderSchedule();
   }
@@ -53,6 +53,11 @@
       const count=poolCount(age);
       poolPlan[age]=Array.from({length:count},()=>[]);
       const target=age==='O/11'?7:age==='O/12'?5:Math.ceil(ts.length/count);
+      const assignedA=ts.filter(t=>t.pool==='A'),assignedB=ts.filter(t=>t.pool==='B');
+      if(count===2 && assignedA.length===target && assignedB.length===target){
+        poolPlan[age]=[assignedA,assignedB];
+        return;
+      }
       ts.forEach((t,i)=>poolPlan[age][Math.min(Math.floor(i/target),count-1)].push(t));
     });
   }
