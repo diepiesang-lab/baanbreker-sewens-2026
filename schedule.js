@@ -97,9 +97,11 @@
     if(ageTeams('O/11').length!==14 || ageTeams('O/12').length!==10){msg('This tournament requires 14 O/11 teams and 10 O/12 teams: 2 pools of 7 and 2 pools of 5.','error');return}
     const games=[];
     groups.forEach(g=>roundRobin(g.teams).forEach((m,i)=>games.push({...m,age:g.age,pool:g.pool,round:'Pool',group:g.age+'|'+g.pool,number:i+1})));
+    games.sort((a,b)=>(a.age==='O/12'?0:1)-(b.age==='O/12'?0:1));
 const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 || pools.some(p=>p.length<(age==='O/11'?6:5))) return; const paths=[['Cup',1],['Plate',3],['Bowl',5]]; paths.forEach(([comp,pos])=>{ games.push({age,pool:'Playoff',round:comp+' Semi 1',group:'playoff',playoff:true,competition:comp,placeholderHome:age+' Pool A '+pos+'th',placeholderAway:age+' Pool B '+(pos+1)+'th'}); games.push({age,pool:'Playoff',round:comp+' Semi 2',group:'playoff',playoff:true,competition:comp,placeholderHome:age+' Pool B '+pos+'th',placeholderAway:age+' Pool A '+(pos+1)+'th'}); games.push({age,pool:'Playoff',round:comp+' Final',group:'playoff',playoff:true,competition:comp,placeholderHome:comp+' Semi 1 winner',placeholderAway:comp+' Semi 2 winner'}); }); };
     playoffForAge('O/11'); playoffForAge('O/12');
     const sl=slots(),fields=Array.from({length:state.fields},(_,i)=>String.fromCharCode(65+i));
+    function fieldOrder(age, fields){ const preferred=age==='O/12'?'A':'B'; return fields.includes(preferred)?[preferred,...fields.filter(f=>f!==preferred)]:fields.slice(); }
     if(!sl.length){msg('No usable time slots. Check your day times.','error');return}
     if(games.length>sl.length*fields.length){msg('<b>'+games.length+' matches</b> need '+(sl.length*fields.length)+' available field slots. Add fields/time or reduce duration.','error');return}
     const last={},used={},teamSlot={},refUsed={},result=[];
@@ -107,7 +109,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
       let placed=null;
       for(const slot of sl){
         const key=slot.date+'|'+slot.time;
-        for(const field of fields.sort((a,b)=>{const preferred=game.age==='O/12'?'A':'B';return (a===preferred? -1:0)-(b===preferred? -1:0)})){
+        for(const field of fieldOrder(game.age, fields)){
           const k=key+'|'+field;if(used[k])continue;
           if(game.home?.id && teamSlot[game.home.id]===key)continue;
           if(game.away?.id && teamSlot[game.away.id]===key)continue;
@@ -121,7 +123,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
       if(!placed){
         for(const slot of sl){
           const key=slot.date+'|'+slot.time;
-          for(const field of fields.sort((a,b)=>{const preferred=game.age==='O/12'?'A':'B';return (a===preferred? -1:0)-(b===preferred? -1:0)})){
+          for(const field of fieldOrder(game.age, fields)){
             const k=key+'|'+field;if(used[k])continue;
             if(teamSlot[game.home.id]===key||teamSlot[game.away.id]===key)continue;
             const ref=state.autoRefs?refs.find(r=>!refUsed[key+'|'+r.id]):null;
