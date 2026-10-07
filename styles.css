@@ -37,3 +37,16 @@
 @media(max-width:600px){.score-meta-line{align-items:flex-start;flex-direction:column}.score-main-grid{grid-template-columns:1fr 1fr;gap:9px}.score-team-card{grid-template-columns:58px 1fr;padding:12px;min-height:125px}.score-team-logo-wrap{width:58px;height:58px}.score-short{font-size:18px}.score-team-card strong{font-size:48px}.score-center{grid-column:1/-1}.score-console .live-clock{min-width:170px}.score-console .live-clock strong{font-size:43px}.scoring-actions-grid{grid-template-columns:1fr;gap:10px}.score-bottom-actions{flex-wrap:wrap}}
 
 .score-time-slots{display:grid;gap:22px;margin-top:18px}.score-time-slot>h3{margin:0 0 10px;color:var(--primary);font-size:16px}.score-concurrent-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.score-time-slot .score-console{min-width:0}.score-other-fields{margin-top:12px}.score-other-fields summary{cursor:pointer;color:var(--muted);font-size:13px;font-weight:800;padding:9px 0}.score-other-fields .score-concurrent-grid{margin-top:8px}@media(max-width:900px){.score-concurrent-grid{grid-template-columns:1fr}}
+
+/* Keep full team names and score values inside each concurrent scoring card. */
+.score-main-grid{grid-template-columns:minmax(0,1fr) minmax(170px,220px) minmax(0,1fr);gap:10px}
+.score-team-card{min-width:0;grid-template-columns:58px minmax(0,1fr);gap:7px 10px;padding:12px}
+.score-team-logo-wrap{width:58px;height:58px}
+.score-team-card .score-short{min-width:0;font-size:clamp(14px,1.35vw,19px);line-height:1.15;letter-spacing:0;overflow-wrap:anywhere;word-break:normal}
+.score-team-card strong{min-width:0;font-size:clamp(38px,3.8vw,54px);line-height:1;white-space:nowrap}
+.score-team-card.away .score-short,.score-team-card.away strong{text-align:right}
+.score-center,.score-action-side{min-width:0}
+.score-console .live-clock{min-width:0;width:100%;max-width:220px;padding:12px 8px}
+.action-team{min-width:0;font-size:15px}
+.action-team b{min-width:0;overflow-wrap:anywhere;line-height:1.15}
+@media(max-width:1200px){.score-concurrent-grid{grid-template-columns:1fr}}
