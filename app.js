@@ -91,7 +91,14 @@ function toggleAdmin(){if(admin)return signOut();if(!online)return alert('Supaba
 async function signOut(){if(online)await sb.auth.signOut();session=null;user=null;admin=false;render()}
 async function inviteAdmin(){if(!admin||!online)return alert('Admin-toegang benodig.');const email=val('invite_email').trim().toLowerCase();if(!email)return alert('Voer e-posadres in.');try{const r=await sb.functions.invoke('invite-admin',{body:{email,redirectTo:location.origin}});if(r.error)throw r.error;if(r.data?.error)throw new Error(r.data.error);document.getElementById('invite_status').textContent='Uitnodiging gestuur na '+email;document.getElementById('invite_email').value=''}catch(e){alert(e.message||'Kon uitnodiging nie stuur nie.')}}
 async function refresh(){if(!online){data=localLoad();return}const [s,t,r,m,e]=await Promise.all([sb.from('tournament_settings').select('*').limit(1).maybeSingle(),sb.from('teams').select('*').order('name'),sb.from('referees').select('*').order('name'),sb.from('matches').select('*').order('match_date').order('match_time'),sb.from('match_events').select('*').order('created_at')]);for(const q of [s,t,r,m,e])if(q.error)throw q.error;if(s.data)data.settings={...data.settings,name:s.data.name||data.settings.name,subtitle:s.data.subtitle||'',dates:s.data.dates||data.settings.dates,location:s.data.location||'',logoUrl:s.data.logo_url||data.settings.logoUrl,primary:s.data.primary_color||data.settings.primary,accent:s.data.accent_color||data.settings.accent};data.teams=(t.data||[]).map(x=>({id:x.id||x.team_id||null,name:x.name,school:x.school||'',age:x.age,pool:x.pool||'A',short:x.short||x.short_name||'',logoUrl:x.logo_url||''})).filter(x=>isUuid(x.id));data.refs=(r.data||[]).map(x=>({id:x.id,name:x.name,level:x.level||'',active:x.active!==false}));data.matches=(m.data||[]).map(x=>({id:x.id,age:x.age,pool:x.pool||'A',round:x.round||'Pool',date:x.match_date||'',time:x.match_time?String(x.match_time).slice(0,5):'',field:x.field||'',homeId:x.home_id||x.home_team_id||null,awayId:x.away_id||x.away_team_id||null,refId:x.referee_id||null,homeScore:x.home_score||0,awayScore:x.away_score||0,status:x.status||'scheduled',period:x.period||0,clockSeconds:x.clock_seconds||0,clockRunning:!!x.clock_running,clockStartedAt:x.clock_started_at,completedAt:x.completed_at,notes:x.notes||''}));data.events=(e.data||[]).map(x=>({id:x.id,matchId:x.match_id,teamId:x.team_id,type:x.event_type,points:x.points,period:x.period,clockSeconds:x.clock_seconds,createdAt:x.created_at}));}
-function subscribe(){if(!online)return;sb.channel('baanbreker-live-v3').on('postgres_changes',{event:'*',schema:'public',table:'matches'},async()=>{await refresh();if(!window.__baanbrekerScheduleActive)render()}).on('postgres_changes',{event:'*',schema:'public',table:'match_events'},async()=>{await refresh();if(!window.__baanbrekerScheduleActive)render()}).subscribe()}
+async function refreshFromRealtime(){
+  const before=new Map(data.matches.map(m=>[m.id,{status:m.status,period:m.period,clockSeconds:m.clockSeconds,clockRunning:m.clockRunning,clockStartedAt:m.clockStartedAt}]));
+  await refresh();
+  const clockStateChanged=data.matches.some(m=>{const old=before.get(m.id);return !old||old.status!==m.status||old.period!==m.period||old.clockSeconds!==m.clockSeconds||old.clockRunning!==m.clockRunning||old.clockStartedAt!==m.clockStartedAt})||before.size!==data.matches.length;
+  if(view==='scoring'&&!clockStateChanged){data.matches.forEach(updateScorePanel);return}
+  if(!window.__baanbrekerScheduleActive)render();
+}
+function subscribe(){if(!online)return;sb.channel('baanbreker-live-v3').on('postgres_changes',{event:'*',schema:'public',table:'matches'},refreshFromRealtime).on('postgres_changes',{event:'*',schema:'public',table:'match_events'},refreshFromRealtime).subscribe()}
 function openPublic(){window.open(location.href.split('#')[0]+'#screen','_blank')}
 function empty(t){return `<div class="empty">${esc(t)}</div>`}
 
@@ -113,6 +120,14 @@ function scoringView(){
 }
 function teamShort(tid){const t=data.teams.find(x=>x.id===tid);return t?.short||((t?.name||'TBD').trim().split(/\s+/).map(x=>x[0]).join('').slice(0,4).toUpperCase())||'TBD'}
 function teamLogo(tid){const t=data.teams.find(x=>x.id===tid);return t?.logoUrl?`<img class="score-team-logo" src="${esc(t.logoUrl)}" alt="">`:`<span class="score-team-logo-fallback">${esc(teamShort(tid).slice(0,3))}</span>`}
+function updateScorePanel(m){
+  const panel=document.getElementById('score-'+m.id);
+  if(!panel)return;
+  const home=panel.querySelector('.score-team-card.home strong');
+  const away=panel.querySelector('.score-team-card.away strong');
+  if(home)home.textContent=String(m.homeScore??0);
+  if(away)away.textContent=String(m.awayScore??0);
+}
 function scorePanel(m){
   const running=!!m.clockRunning,period=m.period||0;
   const c=period===2?'2DE HELFTE':period===1?'1STE HELFTE':'GEREED';
@@ -175,12 +190,12 @@ async function recordScore(matchId,teamId,type,points){
         const up=await sb.from('matches').update(patch).eq('id',matchId);
         if(up.error)throw up.error;
       }
-      await refresh();render();
+      await refresh();updateScorePanel(data.matches.find(x=>x.id===matchId)||m);
     }else{
       if(teamId===m.homeId)m.homeScore=(m.homeScore||0)+points;
       else if(teamId===m.awayId)m.awayScore=(m.awayScore||0)+points;
       data.events.push({id:uuid(),matchId,teamId,type,points,period:m.period,clockSeconds:sec});
-      render();
+      updateScorePanel(m);
     }
   }catch(e){
     alert('Telling kon nie gestoor word nie: '+(e?.message||e));
