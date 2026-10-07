@@ -101,41 +101,82 @@
 const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 || pools.some(p=>p.length<(age==='O/11'?6:5))) return; const paths=[['Cup',1],['Plate',3],['Bowl',5]]; paths.forEach(([comp,pos])=>{ games.push({age,pool:'Playoff',round:comp+' Semi 1',group:'playoff',playoff:true,competition:comp,placeholderHome:age+' Pool A '+pos+'th',placeholderAway:age+' Pool B '+(pos+1)+'th'}); games.push({age,pool:'Playoff',round:comp+' Semi 2',group:'playoff',playoff:true,competition:comp,placeholderHome:age+' Pool B '+pos+'th',placeholderAway:age+' Pool A '+(pos+1)+'th'}); games.push({age,pool:'Playoff',round:comp+' Final',group:'playoff',playoff:true,competition:comp,placeholderHome:comp+' Semi 1 winner',placeholderAway:comp+' Semi 2 winner'}); }); };
     playoffForAge('O/11'); playoffForAge('O/12');
     const sl=slots(),fields=Array.from({length:state.fields},(_,i)=>String.fromCharCode(65+i));
-    function fieldOrder(age, fields){ const preferred=age==='O/12'?'A':'B'; return fields.includes(preferred)?[preferred,...fields.filter(f=>f!==preferred)]:fields.slice(); }
+    function preferredFields(age){
+      const preferred=age==='O/12'?'A':'B';
+      return fields.includes(preferred)?[preferred,...fields.filter(f=>f!==preferred)]:fields.slice();
+    }
     if(!sl.length){msg('No usable time slots. Check your day times.','error');return}
     if(games.length>sl.length*fields.length){msg('<b>'+games.length+' matches</b> need '+(sl.length*fields.length)+' available field slots. Add fields/time or reduce duration.','error');return}
+
     const last={},used={},teamSlot={},refUsed={},result=[];
-    for(const game of games){
-      let placed=null;
-      for(const slot of sl){
-        const key=slot.date+'|'+slot.time;
-        for(const field of fieldOrder(game.age, fields)){
-          const k=key+'|'+field;if(used[k])continue;
-          if(game.home?.id && teamSlot[game.home.id]===key)continue;
-          if(game.away?.id && teamSlot[game.away.id]===key)continue;
-          if((game.home?.id && last[game.home.id]&&last[game.home.id].date===slot.date&&slot.minute-last[game.home.id].minute<state.duration+state.minRest)||
-             (game.away?.id && last[game.away.id]&&last[game.away.id].date===slot.date&&slot.minute-last[game.away.id].minute<state.duration+state.minRest))continue;
-          const ref=state.autoRefs?refs.find(r=>!refUsed[key+'|'+r.id]):null;
-          if(state.autoRefs&&refs.length&&!ref)continue;
-          placed={...game,date:slot.date,time:slot.time,minute:slot.minute,field,refId:ref?.id||null};break;
-        } if(placed)break;
+    const remaining=games.slice();
+
+    function canPlace(game,slot,key){
+      if(game.home?.id && teamSlot[game.home.id]===key)return false;
+      if(game.away?.id && teamSlot[game.away.id]===key)return false;
+      if(game.home?.id && last[game.home.id]&&last[game.home.id].date===slot.date&&slot.minute-last[game.home.id].minute<state.duration+state.minRest)return false;
+      if(game.away?.id && last[game.away.id]&&last[game.away.id].date===slot.date&&slot.minute-last[game.away.id].minute<state.duration+state.minRest)return false;
+      return true;
+    }
+
+    function placeGame(game,slot,field){
+      const key=slot.date+'|'+slot.time;
+      const ref=state.autoRefs?refs.find(r=>!refUsed[key+'|'+r.id]):null;
+      if(state.autoRefs&&refs.length&&!ref)return false;
+      const placed={...game,date:slot.date,time:slot.time,minute:slot.minute,field,refId:ref?.id||null};
+      used[key+'|'+field]=true;
+      if(placed.home?.id){last[placed.home.id]={date:placed.date,minute:placed.minute};teamSlot[placed.home.id]=key}
+      if(placed.away?.id){last[placed.away.id]={date:placed.date,minute:placed.minute};teamSlot[placed.away.id]=key}
+      if(placed.refId)refUsed[key+'|'+placed.refId]=true;
+      result.push(placed);
+      return true;
+    }
+
+    // Schedule slot-by-slot. This is the important field rule:
+    // O/12 gets Field A first and O/11 gets Field B first.
+    // O/11 is never put on A while an O/12 match is still waiting for that slot.
+    // After all O/12 matches have been scheduled, O/11 may use A as well.
+    for(const slot of sl){
+      const key=slot.date+'|'+slot.time;
+      const o12=remaining.find(g=>g.age==='O/12' && canPlace(g,slot,key));
+      if(o12 && fields.includes('A') && !used[key+'|A']){
+        if(placeGame(o12,slot,'A')) remaining.splice(remaining.indexOf(o12),1);
       }
-      if(!placed){
-        for(const slot of sl){
-          const key=slot.date+'|'+slot.time;
-          for(const field of fieldOrder(game.age, fields)){
-            const k=key+'|'+field;if(used[k])continue;
-            if(teamSlot[game.home.id]===key||teamSlot[game.away.id]===key)continue;
-            const ref=state.autoRefs?refs.find(r=>!refUsed[key+'|'+r.id]):null;
-            if(state.autoRefs&&refs.length&&!ref)continue;
-            placed={...game,date:slot.date,time:slot.time,minute:slot.minute,field,refId:ref?.id||null};break;
-          } if(placed)break;
+
+      const o11=remaining.find(g=>g.age==='O/11' && canPlace(g,slot,key));
+      if(o11 && fields.includes('B') && !used[key+'|B']){
+        if(placeGame(o11,slot,'B')) remaining.splice(remaining.indexOf(o11),1);
+      }
+
+      // Other fields can be used without breaking the A/B priority.
+      for(const field of fields.filter(f=>f!=='A'&&f!=='B')){
+        if(remaining.length===0)break;
+        const g=remaining.find(x=>canPlace(x,slot,key));
+        if(g && !used[key+'|'+field]){
+          if(placeGame(g,slot,field))remaining.splice(remaining.indexOf(g),1);
         }
       }
-      if(!placed){msg('Could not place every match. Reduce rest time/duration or add fields.','error');preview=[];renderSchedule();return}
-      const key=placed.date+'|'+placed.time;used[key+'|'+placed.field]=true;
-      if(placed.home?.id){last[placed.home.id]={date:placed.date,minute:placed.minute};teamSlot[placed.home.id]=key;}
-      if(placed.away?.id){last[placed.away.id]={date:placed.date,minute:placed.minute};teamSlot[placed.away.id]=key;}if(placed.refId)refUsed[key+'|'+placed.refId]=true;result.push(placed);
+
+      // Only after all O/12 fixtures have been scheduled may O/11 use Field A.
+      if(!remaining.some(g=>g.age==='O/12') && fields.includes('A') && !used[key+'|A']){
+        const o11a=remaining.find(g=>g.age==='O/11' && canPlace(g,slot,key));
+        if(o11a) { if(placeGame(o11a,slot,'A'))remaining.splice(remaining.indexOf(o11a),1); }
+      }
+
+      // Fill any still-free fields, while retaining the preferred A/B choices above.
+      for(const field of fields){
+        if(remaining.length===0)break;
+        if(used[key+'|'+field])continue;
+        const g=remaining.find(x=>canPlace(x,slot,key));
+        if(g){
+          if(placeGame(g,slot,field))remaining.splice(remaining.indexOf(g),1);
+        }
+      }
+    }
+
+    if(remaining.length){
+      msg('Could not place every match. Reduce rest time/duration or add fields. '+remaining.length+' matches remain.','error');
+      preview=[];renderSchedule();return
     }
     preview=result.sort((a,b)=>(a.date+a.time+a.field).localeCompare(b.date+b.time+b.field));
     renderSchedule();msg('<b>'+preview.length+' matches</b> generated. Review the schedule before saving.','success');
