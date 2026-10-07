@@ -28,7 +28,7 @@
     msg('Loading teams and referees…');
     const [tr,rr]=await Promise.all([
       sb.from('teams').select('id,name,short,age,pool,active,logo_url').eq('active',true).order('age').order('name'),
-      sb.from('referees').select('id,name,active').eq('active',true).order('name')
+      sb.from('referees').select('id,name,active,team_id').eq('active',true).order('name')
     ]);
     if(tr.error){msg('Could not load teams: '+esc(tr.error.message),'error');return}
     teams=(tr.data||[]).filter(t=>t.id).map(t=>({...t,short:t.short||'',pool:String(t.pool||'').toUpperCase(),logo_url:t.logo_url||''}));
@@ -144,7 +144,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
 
     function placeGame(game,slot,field){
       const key=slot.date+'|'+slot.time;
-      const ref=state.autoRefs?refs.find(r=>!refUsed[key+'|'+r.id]):null;
+      const ref=state.autoRefs?refs.find(r=>!refUsed[key+'|'+r.id]&&r.team_id!==game.home?.id&&r.team_id!==game.away?.id):null;
       if(state.autoRefs&&refs.length&&!ref)return false;
       const placed={...game,date:slot.date,time:slot.time,minute:slot.minute,field,refId:ref?.id||null};
       used[key+'|'+field]=true;
