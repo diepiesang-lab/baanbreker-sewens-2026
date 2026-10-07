@@ -138,13 +138,15 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
     // After all O/12 matches have been scheduled, O/11 may use A as well.
     for(const slot of sl){
       const key=slot.date+'|'+slot.time;
+      const poolStageActive=remaining.some(g=>g.round==='Pool');
       const o12PoolPhaseActive=remaining.some(g=>g.age==='O/12' && g.round==='Pool');
-      const o12=remaining.find(g=>g.age==='O/12' && canPlace(g,slot,key));
+      const eligibleInCurrentPhase=g=>!poolStageActive || g.round==='Pool';
+      const o12=o12PoolPhaseActive?remaining.find(g=>g.age==='O/12' && g.round==='Pool' && canPlace(g,slot,key)):null;
       if(o12 && fields.includes('A') && !used[key+'|A']){
         if(placeGame(o12,slot,'A')) remaining.splice(remaining.indexOf(o12),1);
       }
 
-      const o11=remaining.find(g=>g.age==='O/11' && canPlace(g,slot,key));
+      const o11=remaining.find(g=>g.age==='O/11' && eligibleInCurrentPhase(g) && canPlace(g,slot,key));
       if(o11 && fields.includes('B') && !used[key+'|B']){
         if(placeGame(o11,slot,'B')) remaining.splice(remaining.indexOf(o11),1);
       }
@@ -152,7 +154,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
       // Other fields can be used without breaking the A/B priority.
       for(const field of fields.filter(f=>f!=='A'&&f!=='B')){
         if(remaining.length===0)break;
-        const g=remaining.find(x=>canPlace(x,slot,key));
+        const g=remaining.find(x=>eligibleInCurrentPhase(x) && canPlace(x,slot,key));
         if(g && !used[key+'|'+field]){
           if(placeGame(g,slot,field))remaining.splice(remaining.indexOf(g),1);
         }
@@ -161,7 +163,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
       // Release Field A from the next slot after O/12 pool play clears.
       // O/12 playoff placeholders do not keep the pool-stage reservation active.
       if(!o12PoolPhaseActive && fields.includes('A') && !used[key+'|A']){
-        const o11a=remaining.find(g=>g.age==='O/11' && canPlace(g,slot,key));
+        const o11a=remaining.find(g=>g.age==='O/11' && eligibleInCurrentPhase(g) && canPlace(g,slot,key));
         if(o11a) { if(placeGame(o11a,slot,'A'))remaining.splice(remaining.indexOf(o11a),1); }
       }
 
@@ -169,7 +171,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
       for(const field of fields){
         if(remaining.length===0)break;
         if(used[key+'|'+field])continue;
-        const g=remaining.find(x=>canPlace(x,slot,key));
+        const g=remaining.find(x=>eligibleInCurrentPhase(x) && canPlace(x,slot,key));
         if(g){
           if(placeGame(g,slot,field))remaining.splice(remaining.indexOf(g),1);
         }
