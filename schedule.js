@@ -4,6 +4,7 @@
   const online = !!(CFG.supabaseUrl && CFG.supabaseAnonKey && window.supabase);
   const sb = online ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey) : null;
   const STORE='baanbreker_schedule_builder_v2';
+  const SIMULATION_NOTE='SIMULATION_SCORE_TEST';
   let teams=[], refs=[], preview=[], loaded=false, poolPlan={}, simulationLog=[];
 
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
@@ -223,7 +224,8 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
   function simulationLine(m,index){
     const title=m.playoff?(m.competition+' · '+m.round):('Pool '+m.pool);
     const home=m.home?.name||m.placeholderHome||'TBD',away=m.away?.name||m.placeholderAway||'TBD';
-    return String(index).padStart(2,'0')+' | '+m.date+' '+m.time+' | Field '+m.field+' | '+m.age+' | '+title+' | '+home+' vs '+away;
+    const score=m.simulatedHomeScore==null?'':' | Score '+m.simulatedHomeScore+'–'+m.simulatedAwayScore;
+    return String(index).padStart(2,'0')+' | '+m.date+' '+m.time+' | Field '+m.field+' | '+m.age+' | '+title+' | '+home+' vs '+away+score;
   }
   function showSimulationLog(){
     const box=get('schedule-log');
@@ -231,6 +233,47 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
     console.groupCollapsed('Baanbreker schedule simulation ('+simulationLog.length+' entries)');
     console.table(simulationLog.map(line=>({fixture:line})));
     console.groupEnd();
+  }
+
+  function randomSimulationScores(index){
+    const values=[0,3,5,7,8,10,12,13,14,15,17,19,20,21,22,24,26,28,29,31,33,35,36,38,40,43,45];
+    const pick=()=>values[Math.floor(Math.random()*values.length)];
+    const baseValues=values.filter(v=>v>=8&&v<=35);
+    const base=baseValues[Math.floor(Math.random()*baseValues.length)];
+    switch(index%8){
+      case 0:return [base,base];
+      case 1:return [base,base-3];
+      case 2:return [base-5,base];
+      case 3:return [base+14,base];
+      case 4:return [base,base+15];
+      default:return [pick(),pick()];
+    }
+  }
+  async function simulateSchedule(){
+    preview=[];
+    generate(true);
+    if(!preview.length)return;
+    if(!(await adminOK()))return;
+    const poolMatches=preview.filter(m=>m.round==='Pool'&&m.home?.id&&m.away?.id);
+    if(!poolMatches.length){msg('No pool fixtures with assigned teams are available to simulate.','error');return}
+    try{
+      const rows=poolMatches.map((m,i)=>{
+        const [homeScore,awayScore]=randomSimulationScores(i);
+        m.simulatedHomeScore=homeScore;m.simulatedAwayScore=awayScore;
+        return {age:m.age,pool:m.pool,round:'Pool',match_date:m.date,match_time:m.time+':00',field:m.field,home_id:m.home.id,away_id:m.away.id,referee_id:m.refId||null,home_score:homeScore,away_score:awayScore,status:'completed',notes:SIMULATION_NOTE};
+      });
+      const cleared=await sb.from('matches').delete().eq('notes',SIMULATION_NOTE);
+      if(cleared.error)throw cleared.error;
+      const inserted=await sb.from('matches').insert(rows);
+      if(inserted.error)throw inserted.error;
+      simulationLog=poolMatches.map((m,i)=>simulationLine(m,i+1));
+      console.groupCollapsed('Baanbreker simulated Puntetabel scores');
+      console.table(poolMatches.map(m=>({age:m.age,pool:m.pool,home:m.home.name,homeScore:m.simulatedHomeScore,awayScore:m.simulatedAwayScore,away:m.away.name})));
+      console.groupEnd();
+      window.__baanbrekerScheduleActive=false;
+      if(window.go)window.go('standings');
+      if(window.refreshTournamentData)await window.refreshTournamentData();
+    }catch(e){msg('Could not save simulated scores: '+esc(e.message||e),'error')}
   }
 
   async function adminOK(){
@@ -273,7 +316,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
     '<section class="schedule-step"><div class="step-no">01</div><div class="step-body"><h3>Pool setup</h3><p>Set the ideal number of teams per pool. The system calculates the number of pools automatically.</p><div class="pool-config"><label>Teams per pool<input id="s_per_pool" type="number" min="2" max="12" value="'+esc(d.teamsPerPool)+'"></label><div class="pool-auto-card"><span>Automatic pool calculation</span><b>'+esc(poolSummary())+'</b></div></div><div id="pool-preview" class="pool-preview">'+poolPreviewHtml()+'</div></div></section>'+
     '<section class="schedule-step"><div class="step-no">02</div><div class="step-body"><h3>Two-day timing</h3><div class="schedule-day-grid"><div class="day-card"><span>DAY 1</span><h4>16 October 2026</h4><div class="twocol"><label>Date<input id="s_day1" type="date" value="'+esc(d.day1)+'"></label><label>Start<input id="s_day1_start" type="time" value="'+esc(d.day1Start)+'"></label><label>Finish<input id="s_day1_end" type="time" value="'+esc(d.day1End)+'"></label></div></div><div class="day-card"><span>DAY 2</span><h4>17 October 2026</h4><div class="twocol"><label>Date<input id="s_day2" type="date" value="'+esc(d.day2)+'"></label><label>Start<input id="s_day2_start" type="time" value="'+esc(d.day2Start)+'"></label><label>Finish<input id="s_day2_end" type="time" value="'+esc(d.day2End)+'"></label></div></div></div></div></section>'+
     '<section class="schedule-step"><div class="step-no">03</div><div class="step-body"><h3>Match logistics</h3><div class="settings-grid"><label>Match duration<input id="s_duration" type="number" min="1" max="60" value="'+esc(d.duration)+'"><small>minutes</small></label><label>Break between matches<input id="s_break" type="number" min="0" max="60" value="'+esc(d.break)+'"><small>minutes</small></label><label>Number of fields<input id="s_fields" type="number" min="1" max="26" value="'+esc(d.fields)+'"><small>simultaneous fields</small></label><label>Minimum team rest<input id="s_rest" type="number" min="0" max="120" value="'+esc(d.minRest)+'"><small>minutes</small></label></div><div class="toggle-row"><label><input id="s_refs" type="checkbox" '+(d.autoRefs?'checked':'')+'> Auto-assign referees</label><label><input id="s_replace" type="checkbox" '+(d.replace?'checked':'')+'> Replace existing scheduled matches</label></div></div></section>'+
-    '<div class="schedule-action-bar"><button class="primary big" onclick="generateSchedule()">⚡ Generate schedule</button><button onclick="simulateSchedule()">▶ Simulate &amp; show log</button><button onclick="scheduleSaveParams()">Save setup</button><button id="s_save" class="success big" onclick="saveGeneratedSchedule()">✓ Save schedule</button><button class="danger-outline" onclick="resetTournamentData()">Reset tournament data</button></div><div id="sched-msg" class="schedule-message"></div><pre id="schedule-log" class="schedule-log" hidden></pre>';
+    '<div class="schedule-action-bar"><button class="primary big" onclick="generateSchedule()">⚡ Generate schedule</button><button onclick="simulateSchedule()">▶ Simulate scores &amp; open Puntetabel</button><button onclick="scheduleSaveParams()">Save setup</button><button id="s_save" class="success big" onclick="saveGeneratedSchedule()">✓ Save schedule</button><button class="danger-outline" onclick="resetTournamentData()">Reset tournament data</button></div><div id="sched-msg" class="schedule-message"></div><pre id="schedule-log" class="schedule-log" hidden></pre>';
   }
   function poolSummary(){
     const a=poolCount('O/11'),b=poolCount('O/12');return (a?'O/11: '+a+' pool'+(a>1?'s':''):'O/11: —')+'  ·  '+(b?'O/12: '+b+' pool'+(b>1?'s':''):'O/12: —');
@@ -309,7 +352,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
   function scheduleBack(){window.__baanbrekerScheduleActive=false;if(window.go)window.go('dashboard')}
   function enter(){window.__baanbrekerScheduleActive=true;if(!loaded)loadTeams().catch(e=>msg(e.message,'error'));else renderSchedule()}
 
-  window.generateSchedule=generate;window.simulateSchedule=()=>generate(true);window.saveGeneratedSchedule=saveGenerated;window.loadScheduleTeams=loadTeams;
+  window.generateSchedule=generate;window.simulateSchedule=simulateSchedule;window.saveGeneratedSchedule=saveGenerated;window.loadScheduleTeams=loadTeams;
   window.scheduleTeamChanged=teamChanged;window.scheduleSelectAge=selectAge;window.toggleScheduleTeams=toggleScheduleTeams;
   window.scheduleSaveParams=saveParams;window.scheduleBack=scheduleBack;window.clearTournamentScores=clearTournamentScores;
 
