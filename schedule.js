@@ -100,7 +100,7 @@
       let placed=null;
       for(const slot of sl){
         const key=slot.date+'|'+slot.time;
-        for(const field of fields){
+        for(const field of fields.sort((a,b)=>{const preferred=game.age==='O/12'?'A':'B';return (a===preferred? -1:0)-(b===preferred? -1:0)})){
           const k=key+'|'+field;if(used[k])continue;
           if(teamSlot[game.home.id]===key||teamSlot[game.away.id]===key)continue;
           if((last[game.home.id]&&last[game.home.id].date===slot.date&&slot.minute-last[game.home.id].minute<state.duration+state.minRest)||
@@ -113,7 +113,7 @@
       if(!placed){
         for(const slot of sl){
           const key=slot.date+'|'+slot.time;
-          for(const field of fields){
+          for(const field of fields.sort((a,b)=>{const preferred=game.age==='O/12'?'A':'B';return (a===preferred? -1:0)-(b===preferred? -1:0)})){
             const k=key+'|'+field;if(used[k])continue;
             if(teamSlot[game.home.id]===key||teamSlot[game.away.id]===key)continue;
             const ref=state.autoRefs?refs.find(r=>!refUsed[key+'|'+r.id]):null;
@@ -148,18 +148,16 @@
     }catch(e){msg('Could not save schedule: '+esc(e.message||e),'error')}finally{if(b)b.disabled=false}
   }
 
-  async function resetTournament(){
+  async function clearTournamentScores(){
     if(!(await adminOK()))return;
-    if(!confirm('RESET TOURNAMENT DATA? This will remove all matches, teams and referees. Admin accounts will NOT be removed.'))return;
+    if(!confirm('CLEAR SCORES ONLY? This will keep teams, referees and the full schedule, but reset all match scores and live scoring state.'))return;
     try{
       msg('Resetting tournament data…');
-      const tables=['match_events','matches','teams','referees'];
-      for(const table of tables){
-        const r=await sb.from(table).delete().not('id','is',null);
-        if(r.error && table==='match_events' && /relation|does not exist/i.test(r.error.message))continue;
-        if(r.error)throw r.error;
-      }
-      teams=[];refs=[];preview=[];poolPlan={};loaded=true;renderSchedule();msg('Tournament data has been reset. Admin accounts were preserved.','success');
+      const r=await sb.from('matches').update({home_score:0,away_score:0,status:'scheduled',clock_running:false,clock_seconds:420,clock_started_at:null,current_half:1}).neq('status','__never__');
+      if(r.error)throw r.error;
+      const ev=await sb.from('match_events').delete().not('id','is',null);
+      if(ev.error && !/relation .* does not exist|table .* does not exist/i.test(ev.error.message))throw ev.error;
+      msg('Scores cleared. Teams, referees, matches and schedule were preserved.','success');
     }catch(e){msg('Reset failed: '+esc(e.message||e),'error')}
   }
 
@@ -211,7 +209,7 @@
 
   window.generateSchedule=generate;window.saveGeneratedSchedule=saveGenerated;window.loadScheduleTeams=loadTeams;
   window.scheduleTeamChanged=teamChanged;window.scheduleSelectAge=selectAge;window.toggleScheduleTeams=toggleScheduleTeams;
-  window.scheduleSaveParams=saveParams;window.scheduleBack=scheduleBack;window.resetTournamentData=resetTournament;
+  window.scheduleSaveParams=saveParams;window.scheduleBack=scheduleBack;window.clearTournamentScores=clearTournamentScores;
 
   const originalGo=window.go;
   window.go=function(v){if(v==='schedule'){enter();return}window.__baanbrekerScheduleActive=false;return originalGo(v)};
