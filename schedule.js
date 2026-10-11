@@ -156,7 +156,7 @@ const playoffForAge=(age)=>{
     const sl=slots(),fields=Array.from({length:state.fields},(_,i)=>String.fromCharCode(65+i));
     const presidentSteynAges=new Set(selectedTeams().filter(isPresidentSteyn).map(t=>t.age));
     const isRestrictedMatch=game=>isPresidentSteyn(game.home)||isPresidentSteyn(game.away)||(game.playoff&&presidentSteynAges.has(game.age));
-    const presidentSteynStartMinute=slot=>slot.date===state.day1?15*60:16*60;
+    const presidentSteynStartMinute=slot=>slot.date===state.day1?15*60:0;
     const lateSlots=sl.filter(slot=>slot.minute>=presidentSteynStartMinute(slot));
     function preferredFields(age){
       const preferred=age==='O/12'?'A':'B';
@@ -165,7 +165,7 @@ const playoffForAge=(age)=>{
     if(!sl.length){msg('No usable time slots. Check your day times.','error');return}
     const restrictedGames=games.filter(isRestrictedMatch);
     if(restrictedGames.length>lateSlots.length*fields.length){
-      msg('<b>President Steyn scheduling limit:</b> '+restrictedGames.length+' pool/playoff matches involving President Steyn teams, or their possible age-group playoff paths, require a start at or after 15:00 on day one and 16:00 on day two. Only '+(lateSlots.length*fields.length)+' field slots meet those time limits across the selected tournament days. Extend the day times, add fields, or reduce the fixtures/duration.','error');return;
+      msg('<b>President Steyn scheduling limit:</b> '+restrictedGames.length+' pool/playoff matches involving President Steyn teams, or their possible age-group playoff paths, require a start at or after 15:00 on day one. Day two has no time restriction. Only '+(lateSlots.length*fields.length)+' field slots meet the day-one time limit across the selected tournament days. Extend day one, add fields, or reduce the fixtures/duration.','error');return;
     }
     if(games.length>sl.length*fields.length){msg('<b>'+games.length+' matches</b> need '+(sl.length*fields.length)+' available field slots. Add fields/time or reduce duration.','error');return}
 
@@ -252,7 +252,7 @@ const playoffForAge=(age)=>{
       preview=[];renderSchedule();
       if(simulateOnly)showSimulationLog();
       if(remaining.some(isRestrictedMatch)){
-        msg('Could not fit every President Steyn pool/playoff fixture into available starts at or after 15:00 on day one and 16:00 on day two. Extend the day times, add fields, or reduce duration/rest time. '+remaining.length+' matches remain.','error');
+        msg('Could not fit every President Steyn pool/playoff fixture into available starts at or after 15:00 on day one. Day two has no time restriction. Extend day one, add fields, or reduce duration/rest time. '+remaining.length+' matches remain.','error');
         return;
       }
       msg('Could not place every match. Reduce rest time/duration or add fields. '+remaining.length+' matches remain.','error');
