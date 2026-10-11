@@ -14,7 +14,7 @@
     day1:'2026-10-16',day1Start:'08:00',day1End:'16:00',
     day2:'2026-10-17',day2Start:'08:00',day2End:'15:00',
     duration:15,break:5,fields:4,minRest:0,autoRefs:true,replace:false,
-    teamsPerPoel:4,ages:['O/11','O/12']
+    teamsPerPool:4,ages:['O/11','O/12']
   };
   const state=Object.assign({},defaults,(()=>{try{return JSON.parse(localStorage.getItem(STORE)||'{}')}catch{return {}}})());
   function saveState(){try{localStorage.setItem(STORE,JSON.stringify(state))}catch{}}
@@ -36,7 +36,7 @@
     teams=(tr.data||[]).filter(t=>t.id).map(t=>({...t,name:t.name||'',school:t.school||'',short:t.short||'',pool:String(t.pool||'').toUpperCase(),logo_url:t.logo_url||''}));
     refs=rr.error?[]:(rr.data||[]);
     existingWedstrydes=(mr.data||[]).map(m=>({date:m.match_date||'',time:m.match_time?String(m.match_time).slice(0,5):'',field:m.field||'',status:m.status||'scheduled'}));
-    loaded=true; buildPoelPlan(); renderSchedule();
+    loaded=true; buildPoolPlan(); renderSchedule();
   }
 
   function selectedTeams(){return teams.filter(t=>get('team_'+t.id)?.checked)}
@@ -45,11 +45,11 @@
     const n=ageTeams(age).length;
     if(age==='O/11') return n?2:0;
     if(age==='O/12') return n?2:0;
-    const per=Math.max(2,Number(state.teamsPerPoel)||4);
+    const per=Math.max(2,Number(state.teamsPerPool)||4);
     return n?Math.ceil(n/per):0;
   }
   function poolName(i){return String.fromCharCode(65+i)}
-  function buildPoelPlan(){
+  function buildPoolPlan(){
     poolPlan={};
     ['O/11','O/12'].forEach(age=>{
       const ts=ageTeams(age).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
@@ -65,7 +65,7 @@
     });
   }
   function poolGroups(){
-    buildPoelPlan();
+    buildPoolPlan();
     const out=[];
     Object.entries(poolPlan).forEach(([age,pools])=>pools.forEach((ts,i)=>{
       if(ts.length>=2)out.push({age,pool:poolName(i),teams:ts});
@@ -129,7 +129,7 @@
     state.break=Math.max(0,parseInt(val('s_break')||5));
     state.fields=Math.max(1,parseInt(val('s_fields')||1));
     state.minRest=Math.max(0,parseInt(val('s_rest')||0));
-    state.teamsPerPoel=Math.max(2,parseInt(val('s_per_pool')||4));
+    state.teamsPerPool=Math.max(2,parseInt(val('s_per_pool')||4));
     state.day1=val('s_day1');state.day1Start=val('s_day1_start');state.day1End=val('s_day1_end');
     state.day2=val('s_day2');state.day2Start=val('s_day2_start');state.day2End=val('s_day2_end');
     state.autoRefs=checked('s_refs');state.replace=checked('s_replace');saveState();
@@ -141,7 +141,7 @@
     groups.forEach(g=>{
       (fixturesByOuderdom[g.age]??=[]).push({
         pool:g.pool,
-        fixtures:roundRobin(g.teams).map((m,i)=>({...m,age:g.age,pool:g.pool,round:'Poel',group:g.age+'|'+g.pool,number:i+1}))
+        fixtures:roundRobin(g.teams).map((m,i)=>({...m,age:g.age,pool:g.pool,round:'Pool',group:g.age+'|'+g.pool,number:i+1}))
       });
     });
     ['O/12','O/11'].forEach(age=>{
@@ -156,7 +156,7 @@ const playoffForOuderdom=(age)=>{
       if(pools.length!==2)return;
       const enough=(place)=>pools.every(p=>p.length>=place);
       const seed=(pool,place)=>age+' Poel '+pool+' place '+place;
-      const add=(competition,round,home,away,gameNumber,requiredVeld)=>games.push({age,pool:competition+' '+(round.includes('Semi')?'Semi-final':'Final'),round,group:'playoff',playoff:true,competition,gameNumber,requiredVeld,placeholderTuis:home,placeholderWeg:away});
+      const add=(competition,round,home,away,gameNumber,requiredVeld)=>games.push({age,pool:competition+' '+(round.includes('Semi')?'Semi-final':'Final'),round,group:'playoff',playoff:true,competition,gameNumber,requiredVeld,placeholderHome:home,placeholderAway:away});
 
       if(enough(2)){
         add('Cup','Cup Semi 1',seed('A',1),seed('B',2),1);
@@ -198,7 +198,7 @@ const playoffForOuderdom=(age)=>{
       if(refereeSchool==='__AMBIGUOUS__')return false;
       if(!refereeSchool)return true;
       const opponents=game.playoff
-        ? [...possibleSchoolsForPlaceholder(game.placeholderTuis,game.age),...possibleSchoolsForPlaceholder(game.placeholderWeg,game.age)]
+        ? [...possibleSchoolsForPlaceholder(game.placeholderHome,game.age),...possibleSchoolsForPlaceholder(game.placeholderAway,game.age)]
         : [schoolForTeam(game.home),schoolForTeam(game.away)];
       return !opponents.includes(refereeSchool);
     };
@@ -207,7 +207,7 @@ const playoffForOuderdom=(age)=>{
     const lateSlots=sl.filter(slot=>slot.minute>=presidentSteynStartMinute(slot));
     function preferredVelds(age){
       const preferred=age==='O/12'?'A':'B';
-      return fields.includes(preferred)?[preferred,...fields.filter(f=>f!==preferred)]:fields.slice();
+      return velde.includes(preferred)?[preferred,...fields.filter(f=>f!==preferred)]:fields.slice();
     }
     if(!sl.length){msg('Geen beskikbare tydgleuwe nie. Kontroleer die dag se tye.','error');return}
     const restrictedGames=games.filter(isRestrictedWedstryd);
@@ -216,15 +216,15 @@ const playoffForOuderdom=(age)=>{
     }
     if(games.length>sl.length*fields.length){msg('<b>'+games.length+' wedstryde</b> benodig '+(sl.length*fields.length)+' beskikbare veldgleuwe. Voeg velde/tyd by of verkort wedstrydlengte.','error');return}
 
-    const last={},used={},teamSlot={},teamLastPoelRound={},refUsed={},refLoad=new Map(refs.map(ref=>[ref.id,0])),result=[];
+    const last={},used={},teamSlot={},teamLastPoolRound={},refUsed={},refLoad=new Map(refs.map(ref=>[ref.id,0])),result=[];
     const remaining=games.slice();
     function canPlace(game,slot,key){
       if(isRestrictedWedstryd(game)&&slot.minute<presidentSteynStartMinute(slot))return false;
       if(game.home?.id && teamSlot[game.home.id]===key)return false;
       if(game.away?.id && teamSlot[game.away.id]===key)return false;
-      if(game.round==='Poel'){
+      if(game.round==='Pool'){
         for(const team of [game.home,game.away]){
-          const previousRound=team?.id?teamLastPoelRound[team.id]:null;
+          const previousRound=team?.id?teamLastPoolRound[team.id]:null;
           if(previousRound!=null&&Math.abs(Number(game.number)-previousRound)<=1)return false;
         }
       }
@@ -245,9 +245,9 @@ const playoffForOuderdom=(age)=>{
       used[key+'|'+field]=true;
       if(placed.home?.id){last[placed.home.id]={date:placed.date,minute:placed.minute};teamSlot[placed.home.id]=key}
       if(placed.away?.id){last[placed.away.id]={date:placed.date,minute:placed.minute};teamSlot[placed.away.id]=key}
-      if(placed.round==='Poel'){
-        if(placed.home?.id)teamLastPoelRound[placed.home.id]=Number(placed.number);
-        if(placed.away?.id)teamLastPoelRound[placed.away.id]=Number(placed.number);
+      if(placed.round==='Pool'){
+        if(placed.home?.id)teamLastPoolRound[placed.home.id]=Number(placed.number);
+        if(placed.away?.id)teamLastPoolRound[placed.away.id]=Number(placed.number);
       }
       if(placed.refId){refUsed[key+'|'+placed.refId]=true;refLoad.set(placed.refId,(refLoad.get(placed.refId)||0)+1)}
       result.push(placed);
@@ -260,25 +260,25 @@ const playoffForOuderdom=(age)=>{
     // After all O/12 wedstryde have been scheduled, O/11 may use A as well.
     for(const slot of sl){
       const key=slot.date+'|'+slot.time;
-      const poolStageActive=remaining.some(g=>g.round==='Poel');
-      const o12PoelPhaseActive=remaining.some(g=>g.age==='O/12' && g.round==='Poel');
+      const poolStageActive=remaining.some(g=>g.round==='Pool');
+      const o12PoelPhaseActive=remaining.some(g=>g.age==='O/12' && g.round==='Pool');
       const nextSemifinalCompetition=['Bowl','Plate','Shield','Cup'].find(comp=>remaining.some(g=>g.playoff && g.competition===comp && g.round.includes('Semi')));
       const nextFinalCompetition=['Bowl','Plate','Shield','Cup'].find(comp=>remaining.some(g=>g.playoff && g.competition===comp && g.round.endsWith('Final')));
       const eligibleInCurrentPhase=g=>{
-        if(poolStageActive) return g.round==='Poel';
+        if(poolStageActive) return g.round==='Pool';
         if(nextSemifinalCompetition)return g.playoff && g.competition===nextSemifinalCompetition && g.round.includes('Semi');
         if(nextFinalCompetition)return g.playoff && g.competition===nextFinalCompetition && g.round.endsWith('Final');
         return false;
       };
       const canUseVeld=(g,field)=>!g.requiredVeld||g.requiredVeld===field;
-      const o12=o12PoelPhaseActive?remaining.find(g=>g.age==='O/12' && g.round==='Poel' && canPlace(g,slot,key)):null;
-      if(o12 && fields.includes('A') && !used[key+'|A']){
+      const o12=o12PoelPhaseActive?remaining.find(g=>g.age==='O/12' && g.round==='Pool' && canPlace(g,slot,key)):null;
+      if(o12 && velde.includes('A') && !used[key+'|A']){
         if(placeGame(o12,slot,'A')) remaining.splice(remaining.indexOf(o12),1);
       }
 
       if(o12PoelPhaseActive){
         const o11=remaining.find(g=>g.age==='O/11' && eligibleInCurrentPhase(g) && canUseVeld(g,'B') && canPlace(g,slot,key));
-        if(o11 && fields.includes('B') && !used[key+'|B']){
+        if(o11 && velde.includes('B') && !used[key+'|B']){
           if(placeGame(o11,slot,'B')) remaining.splice(remaining.indexOf(o11),1);
         }
       } else if(fields.includes('A') && !used[key+'|A']){
@@ -286,8 +286,8 @@ const playoffForOuderdom=(age)=>{
         if(o11a && placeGame(o11a,slot,'A')) remaining.splice(remaining.indexOf(o11a),1);
       }
 
-      // Other fields can be used without breaking the A/B priority.
-      for(const field of fields.filter(f=>f!=='A'&&f!=='B')){
+      // Other velde can be used without breaking the A/B priority.
+      for(const field of velde.filter(f=>f!=='A'&&f!=='B')){
         if(remaining.length===0)break;
         const g=remaining.find(x=>eligibleInCurrentPhase(x) && canUseVeld(x,field) && canPlace(x,slot,key));
         if(g && !used[key+'|'+field]){
@@ -297,8 +297,8 @@ const playoffForOuderdom=(age)=>{
 
       // O/11 receives Veld A once O/12 pool play has cleared.
 
-      // Fill any still-free fields, while retaining the preferred A/B choices above.
-      for(const field of fields){
+      // Fill any still-free velde, while retaining the preferred A/B choices above.
+      for(const field of velde){
         if(remaining.length===0)break;
         if(used[key+'|'+field])continue;
         const g=remaining.find(x=>eligibleInCurrentPhase(x) && canUseVeld(x,field) && canPlace(x,slot,key));
@@ -332,7 +332,7 @@ const playoffForOuderdom=(age)=>{
 
   function simulationLine(m,index){
     const title=m.playoff?(m.competition+' · '+m.round):('Poel '+m.pool);
-    const home=m.home?.name||m.placeholderTuis||'Nog te bepaal',away=m.away?.name||m.placeholderWeg||'Nog te bepaal';
+    const home=m.home?.name||m.placeholderHome||'Nog te bepaal',away=m.away?.name||m.placeholderAway||'Nog te bepaal';
     const score=m.simulatedTuisTelling==null?'':' | Telling '+m.simulatedTuisTelling+'–'+m.simulatedWegTelling;
     return String(index).padStart(2,'0')+' | '+m.date+' '+m.time+' | Veld '+m.field+' | '+m.age+' | '+title+' | '+home+' vs '+away+score;
   }
@@ -363,13 +363,13 @@ const playoffForOuderdom=(age)=>{
     generate(true);
     if(!preview.length)return;
     if(!(await adminOK()))return;
-    const poolWedstrydes=preview.filter(m=>m.round==='Poel'&&m.home?.id&&m.away?.id);
+    const poolWedstrydes=preview.filter(m=>m.round==='Pool'&&m.home?.id&&m.away?.id);
     if(!poolWedstrydes.length){msg('Geen poelwedstryde met toegewysde spanne is beskikbaar vir simulasie nie.','error');return}
     try{
       const rows=poolWedstrydes.map((m,i)=>{
         const [homeTelling,awayTelling]=randomSimulationTellings(i);
         m.simulatedTuisTelling=homeTelling;m.simulatedWegTelling=awayTelling;
-        return {age:m.age,pool:m.pool,round:'Poel',match_date:m.date,match_time:m.time+':00',field:m.field,home_id:m.home.id,away_id:m.away.id,referee_id:m.refId||null,home_score:homeTelling,away_score:awayTelling,status:'completed',notes:SIMULATION_NOTE};
+        return {age:m.age,pool:m.pool,round:'Pool',match_date:m.date,match_time:m.time+':00',field:m.field,home_id:m.home.id,away_id:m.away.id,referee_id:m.refId||null,home_score:homeTelling,away_score:awayTelling,status:'completed',notes:SIMULATION_NOTE};
       });
       const cleared=await sb.from('matches').delete().eq('notes',SIMULATION_NOTE);
       if(cleared.error)throw cleared.error;
@@ -396,7 +396,7 @@ const playoffForOuderdom=(age)=>{
     const b=get('s_save');if(b)b.disabled=true;
     try{
       if(state.replace){const d=await sb.from('matches').delete().eq('status','scheduled');if(d.error)throw d.error}
-      const rows=preview.map(m=>({age:m.age,pool:m.pool,round:m.round,match_date:m.date,match_time:m.time+':00',field:m.field,home_id:m.home?.id||null,away_id:m.away?.id||null,referee_id:m.refId||null,home_score:0,away_score:0,status:'scheduled',notes:m.playoff ? ('PLAYOFF PLACEHOLDER | '+m.placeholderTuis+' vs '+m.placeholderWeg) : 'Generated by Baanbreker two-day schedule builder'}));
+      const rows=preview.map(m=>({age:m.age,pool:m.pool,round:m.round,match_date:m.date,match_time:m.time+':00',field:m.field,home_id:m.home?.id||null,away_id:m.away?.id||null,referee_id:m.refId||null,home_score:0,away_score:0,status:'scheduled',notes:m.playoff ? ('PLAYOFF PLACEHOLDER | '+m.placeholderHome+' vs '+m.placeholderAway) : 'Generated by Baanbreker two-day schedule builder'}));
       const r=await sb.from('matches').insert(rows);if(r.error)throw r.error;
       msg(rows.length+' wedstryde is in Supabase gestoor.','success');if(window.go)window.go('matches');
     }catch(e){msg('Kon nie die program stoor nie: '+esc(e.message||e),'error')}finally{if(b)b.disabled=false}
@@ -415,15 +415,15 @@ const playoffForOuderdom=(age)=>{
     }catch(e){msg('Terugstel het misluk: '+esc(e.message||e),'error')}
   }
 
-  function toggleAll(on){teams.forEach(t=>{const e=get('team_'+t.id);if(e)e.checked=on});buildPoelPlan();renderSchedule()}
-  function selectOuderdom(age){teams.filter(t=>t.age===age).forEach(t=>{const e=get('team_'+t.id);if(e)e.checked=true});buildPoelPlan();renderSchedule()}
-  function teamChanged(){buildPoelPlan();renderSchedule()}
+  function toggleAll(on){teams.forEach(t=>{const e=get('team_'+t.id);if(e)e.checked=on});buildPoolPlan();renderSchedule()}
+  function selectOuderdom(age){teams.filter(t=>t.age===age).forEach(t=>{const e=get('team_'+t.id);if(e)e.checked=true});buildPoolPlan();renderSchedule()}
+  function teamChanged(){buildPoolPlan();renderSchedule()}
 
   function controls(){
     const d=state;
     return '<section class="schedule-hero"><div><span class="schedule-kicker">TOERNOOI-INSTELLING</span><h2>Stel jou tweedaagse wedstrydprogram saam</h2><p>Spanne word outomaties oor die nodige poele verdeel. Die program is nie meer beperk tot poele A–D nie.</p></div><div class="schedule-stat"><strong>'+selectedTeams().length+'</strong><span>spanne gekies</span></div></section>'+
-    '<section class="schedule-step"><div class="step-no">01</div><div class="step-body"><h3>Poelindeling</h3><p>Stel die gewenste aantal spanne per poel. Die stelsel bereken die aantal poele outomaties.</p><div class="pool-config"><label>Spanne per poel<input id="s_per_pool" type="number" min="2" max="12" value="'+esc(d.teamsPerPoel)+'"></label><div class="pool-auto-card"><span>Outomatiese poelberekening</span><b>'+esc(poolSummary())+'</b></div></div><div id="pool-preview" class="pool-preview">'+poolPreviewHtml()+'</div></div></section>'+
-    '<section class="schedule-step"><div class="step-no">02</div><div class="step-body"><h3>Tye vir die twee dae</h3><div class="schedule-day-grid"><div class="day-card"><span>DAG 1</span><h4>16 October 2026</h4><div class="twocol"><label>Date<input id="s_day1" type="date" value="'+esc(d.day1)+'"></label><label>Start<input id="s_day1_start" type="time" value="'+esc(d.day1Start)+'"></label><label>Finish<input id="s_day1_end" type="time" value="'+esc(d.day1End)+'"></label></div></div><div class="day-card"><span>DAG 2</span><h4>17 October 2026</h4><div class="twocol"><label>Date<input id="s_day2" type="date" value="'+esc(d.day2)+'"></label><label>Start<input id="s_day2_start" type="time" value="'+esc(d.day2Start)+'"></label><label>Finish<input id="s_day2_end" type="time" value="'+esc(d.day2End)+'"></label></div></div></div></div></section>'+
+    '<section class="schedule-step"><div class="step-no">01</div><div class="step-body"><h3>Poelindeling</h3><p>Stel die gewenste aantal spanne per poel. Die stelsel bereken die aantal poele outomaties.</p><div class="pool-config"><label>Spanne per poel<input id="s_per_pool" type="number" min="2" max="12" value="'+esc(d.teamsPerPool)+'"></label><div class="pool-auto-card"><span>Outomatiese poelberekening</span><b>'+esc(poolSummary())+'</b></div></div><div id="pool-preview" class="pool-preview">'+poolPreviewHtml()+'</div></div></section>'+
+    '<section class="schedule-step"><div class="step-no">02</div><div class="step-body"><h3>Tye vir die twee dae</h3><div class="schedule-day-grid"><div class="day-card"><span>DAG 1</span><h4>16 Oktober 2026</h4><div class="twocol"><label>Datum<input id="s_day1" type="date" value="'+esc(d.day1)+'"></label><label>Begin<input id="s_day1_start" type="time" value="'+esc(d.day1Start)+'"></label><label>Eindtyd<input id="s_day1_end" type="time" value="'+esc(d.day1End)+'"></label></div></div><div class="day-card"><span>DAG 2</span><h4>17 Oktober 2026</h4><div class="twocol"><label>Datum<input id="s_day2" type="date" value="'+esc(d.day2)+'"></label><label>Begin<input id="s_day2_start" type="time" value="'+esc(d.day2Start)+'"></label><label>Eindtyd<input id="s_day2_end" type="time" value="'+esc(d.day2End)+'"></label></div></div></div></div></section>'+
     '<section class="schedule-step"><div class="step-no">03</div><div class="step-body"><h3>Wedstrydreëlings</h3><div class="settings-grid"><label>Wedstrydlengte<input id="s_duration" type="number" min="1" max="60" value="'+esc(d.duration)+'"><small>minute</small></label><label>Pouse tussen wedstryde<input id="s_break" type="number" min="0" max="60" value="'+esc(d.break)+'"><small>minute</small></label><label>Aantal velde<input id="s_fields" type="number" min="1" max="26" value="'+esc(d.fields)+'"><small>wedstryde gelyktydig</small></label><label>Minimum rustyd vir spanne<input id="s_rest" type="number" min="0" max="120" value="'+esc(d.minRest)+'"><small>minute</small></label></div><div class="toggle-row"><label><input id="s_refs" type="checkbox" '+(d.autoRefs?'checked':'')+'> Ken skeidsregters outomaties toe</label><label><input id="s_replace" type="checkbox" '+(d.replace?'checked':'')+'> Vervang bestaande geskeduleerde wedstryde</label></div></div></section>'+
     '<div class="schedule-action-bar"><button class="primary big" onclick="generateSchedule()">⚡ Skep program</button><button onclick="simulateSchedule()">▶ Simuleer tellings en open die program</button><button onclick="scheduleSaveParams()">Stoor opstelling</button><button id="s_save" class="success big" onclick="saveGeneratedSchedule()">✓ Stoor program</button><button class="danger-outline" onclick="resetTournamentData()">Stel toernooi-data terug</button></div><div id="sched-msg" class="schedule-message"></div><pre id="schedule-log" class="schedule-log" hidden></pre>';
   }
@@ -431,9 +431,9 @@ const playoffForOuderdom=(age)=>{
     const a=poolCount('O/11'),b=poolCount('O/12');return (a?'O/11: '+a+' pool'+(a>1?'s':''):'O/11: —')+'  ·  '+(b?'O/12: '+b+' pool'+(b>1?'s':''):'O/12: —');
   }
   function poolPreviewHtml(){
-    buildPoelPlan();
+    buildPoolPlan();
     const rows=[];
-    Object.entries(poolPlan).forEach(([age,pools])=>pools.forEach((ts,i)=>rows.push('<div class="pool-card"><div><b>Poel '+poolName(i)+'</b><span>'+esc(age)+'</span></div><strong>'+ts.length+'</strong><small>'+esc(ts.map(t=>t.name||short(t)).join(' · ')||'No teams')+'</small></div>')));
+    Object.entries(poolPlan).forEach(([age,pools])=>pools.forEach((ts,i)=>rows.push('<div class="pool-card"><div><b>Poel '+poolName(i)+'</b><span>'+esc(age)+'</span></div><strong>'+ts.length+'</strong><small>'+esc(ts.map(t=>t.name||short(t)).join(' · ')||'Geen spanne')+'</small></div>')));
     return rows.length?rows.join(''):'<div class="empty">Select teams to calculate pools.</div>';
   }
 
@@ -446,18 +446,18 @@ const playoffForOuderdom=(age)=>{
   function renderSchedule(){
     const app=get('app');if(!app||!window.__baanbrekerScheduleActive)return;
     const grouped={};preview.forEach(m=>(grouped[m.date]??=[]).push(m));
-    const previewHtml=preview.length?Object.entries(grouped).map(([date,ms])=>'<section class="schedule-preview"><div class="preview-head"><div><span>'+esc(dateLabel(date))+'</span><h3>'+ms.length+' wedstryde</h3></div><div class="preview-badge">'+esc(state.fields)+' fields</div></div><div class="schedule-table-wrap"><table class="schedule-table"><thead><tr><th>Wedstryd</th><th>Tyd</th><th>Veld</th><th>Ouderdom</th><th>Poel</th><th>Tuis</th><th>Telling</th><th>Weg</th><th>Skeidsregter</th></tr></thead><tbody>'+ms.map(m=>'<tr><td><b>'+esc(m.matchNumber)+'</b></td><td><b>'+esc(m.time)+'</b></td><td>Veld '+esc(m.field)+'</td><td>'+esc(m.age)+'</td><td><span class="pool-pill">'+esc(m.pool)+'</span></td><td><b>'+esc(m.home?.id?(m.home.name||short(m.home)):(m.placeholderTuis||'Nog te bepaal'))+'</b></td><td>—</td><td><b>'+esc(m.away?.id?(m.away.name||short(m.away)):(m.placeholderWeg||'Nog te bepaal'))+'</b></td><td>'+esc(refs.find(r=>r.id===m.refId)?.name||'—')+'</td></tr>').join('')+'</tbody></table></div></section>').join(''):'<section class="schedule-preview empty"><h3>Jou programvoorskou sal hier verskyn</h3><p>Kies spanne, stel die poele op en skep die program.</p></section>';
-    app.innerHTML='<aside class="sidebar"><div class="brand"><div class="brand-logo image-logo"><img src="baanbreker-logo.png" alt=""></div><div><b>Laerskool Baanbreker Sewens</b><small>2026 Rugby Sewens Toernooi</small></div></div><div class="nav"><button onclick="scheduleBack()">← Dashboard</button><button class="active">Programbouer</button></div><div class="side-foot"><span class="dot '+(online?'live':'demo')+'"></span>'+(online?'Online database':'Demo mode')+'</div></aside><section class="page schedule-page"><header><div class="header-brand"><img class="header-logo" src="baanbreker-logo.png" alt=""><div><span class="eyebrow">16–17 October 2026 · Laerskool Baanbreker</span><h1>Programbouer</h1><p>Set the teams. The system calculates the pools and builds the fixture list.</p></div></div></header><main><div class="schedule-topbar"><div><h2>1. Kies spanne</h2><p>Kies die spanne wat gaan deelneem. Poele word outomaties bereken.</p></div><div class="top-actions"><button onclick="loadScheduleTeams()">↻ Herlaai</button><button onclick="toggleScheduleTeams(true)">Kies almal</button><button onclick="toggleScheduleTeams(false)">Maak keuse skoon</button></div></div><div id="team-summary" class="schedule-summary"></div><section class="team-picker" id="schedule-teams"><div class="empty">Loading teams…</div></section>'+controls()+'<div class="schedule-topbar preview-title"><div><h2>4. Schedule preview</h2><p>Check the generated fixtures before saving them to the tournament.</p></div></div>'+previewHtml+'</main></section>';
-    renderTeams();updatePoelUi();
+    const previewHtml=preview.length?Object.entries(grouped).map(([date,ms])=>'<section class="schedule-preview"><div class="preview-head"><div><span>'+esc(dateLabel(date))+'</span><h3>'+ms.length+' wedstryde</h3></div><div class="preview-badge">'+esc(state.fields)+' velde</div></div><div class="schedule-table-wrap"><table class="schedule-table"><thead><tr><th>Wedstryd</th><th>Tyd</th><th>Veld</th><th>Ouderdom</th><th>Poel</th><th>Tuis</th><th>Telling</th><th>Weg</th><th>Skeidsregter</th></tr></thead><tbody>'+ms.map(m=>'<tr><td><b>'+esc(m.matchNumber)+'</b></td><td><b>'+esc(m.time)+'</b></td><td>Veld '+esc(m.field)+'</td><td>'+esc(m.age)+'</td><td><span class="pool-pill">'+esc(m.pool)+'</span></td><td><b>'+esc(m.home?.id?(m.home.name||short(m.home)):(m.placeholderHome||'Nog te bepaal'))+'</b></td><td>—</td><td><b>'+esc(m.away?.id?(m.away.name||short(m.away)):(m.placeholderAway||'Nog te bepaal'))+'</b></td><td>'+esc(refs.find(r=>r.id===m.refId)?.name||'—')+'</td></tr>').join('')+'</tbody></table></div></section>').join(''):'<section class="schedule-preview empty"><h3>Jou programvoorskou sal hier verskyn</h3><p>Kies spanne, stel die poele op en skep die program.</p></section>';
+    app.innerHTML='<aside class="sidebar"><div class="brand"><div class="brand-logo image-logo"><img src="baanbreker-logo.png" alt=""></div><div><b>Laerskool Baanbreker Sewens</b><small>2026 Rugby Sewestoernooi</small></div></div><div class="nav"><button onclick="scheduleBack()">← Dashboard</button><button class="active">Programbouer</button></div><div class="side-foot"><span class="dot '+(online?'live':'demo')+'"></span>'+(online?'Aanlyn databasis':'Voorbeeldmodus')+'</div></aside><section class="page schedule-page"><header><div class="header-brand"><img class="header-logo" src="baanbreker-logo.png" alt=""><div><span class="eyebrow">16–17 Oktober 2026 · Laerskool Baanbreker</span><h1>Programbouer</h1><p>Kies spanne. Die stelsel bereken die poele en stel die wedstrydprogram saam.</p></div></div></header><main><div class="schedule-topbar"><div><h2>1. Kies spanne</h2><p>Kies die spanne wat gaan deelneem. Poele word outomaties bereken.</p></div><div class="top-actions"><button onclick="loadScheduleTeams()">↻ Herlaai</button><button onclick="toggleScheduleTeams(true)">Kies almal</button><button onclick="toggleScheduleTeams(false)">Maak keuse skoon</button></div></div><div id="team-summary" class="schedule-summary"></div><section class="team-picker" id="schedule-teams"><div class="empty">Laai spanne…</div></section>'+controls()+'<div class="schedule-topbar preview-title"><div><h2>4. Programvoorskou</h2><p>Gaan die wedstryde na voordat jy die program stoor.</p></div></div>'+previewHtml+'</main></section>';
+    renderTeams();updatePoolUi();
   }
-  function updatePoelUi(){
+  function updatePoolUi(){
     const e=get('pool-preview');if(e)e.innerHTML=poolPreviewHtml();
-    const per=get('s_per_pool');if(per)per.oninput=()=>{state.teamsPerPoel=Math.max(2,Number(per.value)||4);buildPoelPlan();updatePoelUi();};
+    const per=get('s_per_pool');if(per)per.oninput=()=>{state.teamsPerPool=Math.max(2,Number(per.value)||4);buildPoolPlan();updatePoolUi();};
     const stat=document.querySelector('.schedule-stat strong');if(stat)stat.textContent=selectedTeams().length;
-    const summary=get('team-summary');if(summary){const ts=selectedTeams();summary.innerHTML=ts.length?'<span class="schedule-chip">'+ts.length+' teams selected</span><span class="schedule-chip">'+poolSummary()+'</span>':'<span class="muted">No teams selected</span>'}
+    const summary=get('team-summary');if(summary){const ts=selectedTeams();summary.innerHTML=ts.length?'<span class="schedule-chip">'+ts.length+' spanne gekies</span><span class="schedule-chip">'+poolSummary()+'</span>':'<span class="muted">No spanne gekies</span>'}
   }
-  function saveParams(){state.teamsPerPoel=Math.max(2,Number(val('s_per_pool')||4));saveState();msg('Setup saved.','success')}
-  function toggleScheduleTeams(on){teams.forEach(t=>{const e=get('team_'+t.id);if(e)e.checked=on});buildPoelPlan();renderSchedule()}
+  function saveParams(){state.teamsPerPool=Math.max(2,Number(val('s_per_pool')||4));saveState();msg('Opstelling gestoor.','success')}
+  function toggleScheduleTeams(on){teams.forEach(t=>{const e=get('team_'+t.id);if(e)e.checked=on});buildPoolPlan();renderSchedule()}
   function scheduleBack(){window.__baanbrekerScheduleActive=false;if(window.go)window.go('dashboard')}
   function enter(){window.__baanbrekerScheduleActive=true;if(!loaded)loadTeams().catch(e=>msg(e.message,'error'));else renderSchedule()}
 
