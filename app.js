@@ -198,9 +198,37 @@ function programView(){
   const games=data.matches.filter(m=>m.field==='A'||m.field==='B').sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.time||'').localeCompare(String(b.time||''))||String(a.field||'').localeCompare(String(b.field||'')));
   const numberedMatches=data.matches.slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.time||'').localeCompare(String(b.time||''))||String(a.field||'').localeCompare(String(b.field||'')));
   const matchNumbers=new Map(numberedMatches.map((m,i)=>[m.id,i+1]));
-  const slots=new Map();
-  games.forEach(m=>{const key=`${m.date||''}|${m.time||''}`;if(!slots.has(key))slots.set(key,[]);slots.get(key).push(m)});
-  return `<div class="title-row"><div><h2>Program</h2><p>Wedstryde op Veld A en Veld B, volgens die toernooiskedule.</p></div></div><div class="program-slots">${[...slots.entries()].map(([key,rows])=>{const [date,time]=key.split('|');return `<section class="program-slot"><h3>${esc(date||'Datum onbekend')} · ${esc(time||'Tyd onbekend')}</h3><div class="program-slot-games">${rows.map(m=>`<div class="program-numbered-match"><span class="program-match-number">Match ${matchNumbers.get(m.id)}</span>${matchCard(m)}</div>`).join('')}</div></section>`}).join('')||empty('Geen wedstryde vir Veld A of Veld B nie.')}</div>`;
+  const slots=new Map(),days=new Map();
+  games.forEach(m=>{
+    const key=`${m.date||''}|${m.time||''}`;
+    if(!slots.has(key))slots.set(key,[]);
+    slots.get(key).push(m);
+    const date=m.date||'';
+    if(!days.has(date))days.set(date,[]);
+    days.get(date).push(m);
+  });
+  const printProgram=[...days.entries()].map(([date,rows])=>`<section class="print-day"><h2>${esc(data.settings.name)} · Program · ${esc(date||'Datum onbekend')}</h2><table><thead><tr><th>Wedstryd</th><th>Tyd</th><th>Veld</th><th>Ouderdom / poel</th><th>Spanne</th><th>Skeidsregter</th></tr></thead><tbody>${rows.map(m=>`<tr><td>${matchNumbers.get(m.id)}</td><td>${esc(m.time||'—')}</td><td>${esc(m.field||'—')}</td><td>${esc(m.age||'')} · ${esc(m.round&&m.round!=='Pool'?m.round:'Poel '+(m.pool||'—'))}</td><td>${esc(teamName(m.homeId))} vs ${esc(teamName(m.awayId))}</td><td>${esc(refName(m.refId)||'—')}</td></tr>`).join('')}</tbody></table></section>`).join('');
+  return `<div class="title-row"><div><h2>Program</h2><p>Wedstryde op Veld A en Veld B, volgens die toernooiskedule.</p></div><button class="primary" onclick="window.print()">Druk program / Stoor as PDF</button></div><div class="program-slots">${[...slots.entries()].map(([key,rows])=>{const [date,time]=key.split('|');return `<section class="program-slot"><h3>${esc(date||'Datum onbekend')} · ${esc(time||'Tyd onbekend')}</h3><div class="program-slot-games">${rows.map(m=>`<div class="program-numbered-match"><span class="program-match-number">Match ${matchNumbers.get(m.id)}</span>${matchCard(m)}</div>`).join('')}</div></section>`}).join('')||empty('Geen wedstryde vir Veld A of Veld B nie.')}</div><div id="print-program" class="print-program">${printProgram}</div><style>
+  .print-program{display:none}
+  @media print{
+    @page{size:A4 landscape;margin:8mm}
+    body *{visibility:hidden!important}
+    #app,#app>.page,#app>.page>main{visibility:visible!important}
+    #app .sidebar,#app .page>header,#app .page>main>*:not(#print-program){display:none!important}
+    #app{display:block!important}
+    #app>.page{display:block!important;position:static!important;margin:0!important;padding:0!important;width:100%!important}
+    #app>.page>main{display:block!important;margin:0!important;padding:0!important;width:100%!important}
+    #print-program,#print-program *{visibility:visible!important}
+    #print-program{display:block!important;width:100%!important;color:#111!important;font:8pt/1.15 Arial,sans-serif!important}
+    .print-day{break-after:page;page-break-after:always}
+    .print-day:last-child{break-after:auto;page-break-after:auto}
+    .print-day h2{font-size:14pt;margin:0 0 5mm}
+    .print-day table{border-collapse:collapse;width:100%;table-layout:fixed}
+    .print-day th,.print-day td{border:1px solid #777;padding:2px 4px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+    .print-day th{background:#e9eee9!important;font-size:7pt}
+    .print-day th:nth-child(1){width:7%}.print-day th:nth-child(2){width:8%}.print-day th:nth-child(3){width:7%}.print-day th:nth-child(4){width:21%}.print-day th:nth-child(5){width:43%}.print-day th:nth-child(6){width:14%}
+  }
+  </style>`;
 }
 function scoringView(){
   if(!admin) return `<div class="panel empty"><h2>Live telling</h2><p>Meld aan as admin om wedstryde te bestuur.</p><button class="primary" onclick="toggleAdmin()">Admin Login</button></div>`;
