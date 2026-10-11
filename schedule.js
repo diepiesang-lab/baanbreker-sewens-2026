@@ -77,7 +77,7 @@
     if(a.length%2)a.push(null);
     const out=[],n=a.length;
     for(let r=0;r<n-1;r++){
-      for(let i=0;i<n/2;i++){const x=a[i],y=a[n-1-i];if(x&&y)out.push({home:r%2?y:x,away:r%2?x:y})}
+      for(let i=0;i<n/2;i++){const x=a[i],y=a[n-1-i];if(x&&y)out.push({home:r%2?y:x,away:r%2?x:y,poolRound:r+1})}
       a.splice(1,0,a.pop());
     }
     return out;
@@ -225,7 +225,7 @@ const playoffForOuderdom=(age)=>{
       if(game.round==='Pool'){
         for(const team of [game.home,game.away]){
           const previousRound=team?.id?teamLastPoolRound[team.id]:null;
-          if(previousRound!=null&&Math.abs(Number(game.number)-previousRound)<=1)return false;
+          if(previousRound!=null&&Math.abs(Number(game.poolRound)-previousRound)<=1)return false;
         }
       }
       if(game.home?.id && last[game.home.id]&&last[game.home.id].date===slot.date&&slot.minute-last[game.home.id].minute<state.duration+state.minRest)return false;
@@ -246,7 +246,7 @@ const playoffForOuderdom=(age)=>{
       if(placed.home?.id){last[placed.home.id]={date:placed.date,minute:placed.minute};teamSlot[placed.home.id]=key}
       if(placed.away?.id){last[placed.away.id]={date:placed.date,minute:placed.minute};teamSlot[placed.away.id]=key}
       if(placed.round==='Pool'){
-        if(placed.home?.id)teamLastPoolRound[placed.home.id]=Number(placed.number);
+        if(placed.home?.id)teamLastPoolRound[placed.home.id]=Number(placed.poolRound);
         if(placed.away?.id)teamLastPoolRound[placed.away.id]=Number(placed.number);
       }
       if(placed.refId){refUsed[key+'|'+placed.refId]=true;refLoad.set(placed.refId,(refLoad.get(placed.refId)||0)+1)}
