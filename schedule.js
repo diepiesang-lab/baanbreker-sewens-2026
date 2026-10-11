@@ -27,11 +27,11 @@
     if(!online){teams=[];refs=[];loaded=true;renderSchedule();return}
     msg('Loading teams and referees…');
     const [tr,rr]=await Promise.all([
-      sb.from('teams').select('id,name,short,age,pool,active,logo_url').eq('active',true).order('age').order('name'),
+      sb.from('teams').select('id,name,school,short,age,pool,active,logo_url').eq('active',true).order('age').order('name'),
       sb.from('referees').select('id,name,active,team_id').eq('active',true).order('name')
     ]);
     if(tr.error){msg('Could not load teams: '+esc(tr.error.message),'error');return}
-    teams=(tr.data||[]).filter(t=>t.id).map(t=>({...t,short:t.short||'',pool:String(t.pool||'').toUpperCase(),logo_url:t.logo_url||''}));
+    teams=(tr.data||[]).filter(t=>t.id).map(t=>({...t,name:t.name||'',school:t.school||'',short:t.short||'',pool:String(t.pool||'').toUpperCase(),logo_url:t.logo_url||''}));
     refs=rr.error?[]:(rr.data||[]);
     loaded=true; buildPoolPlan(); renderSchedule();
   }
@@ -88,6 +88,10 @@
     add(state.day1,state.day1Start,state.day1End);add(state.day2,state.day2Start,state.day2End);return out;
   }
 
+  function isPresidentSteyn(team){
+    return [team?.name,team?.school].some(value=>String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'').includes('presidentsteyn'));
+  }
+
   function generate(simulateOnly=false){
     simulationLog=[];
     if(!loaded){msg('Load teams first.','error');return}
@@ -120,11 +124,18 @@
 const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 || pools.some(p=>p.length<(age==='O/11'?6:5))) return; const paths=[['Bowl',5],['Plate',3],['Cup',1]]; paths.forEach(([comp,pos])=>{ games.push({age,pool:'Playoff',round:comp+' Semi 1',group:'playoff',playoff:true,competition:comp,placeholderHome:age+' Pool A '+pos+'th',placeholderAway:age+' Pool B '+(pos+1)+'th'}); games.push({age,pool:'Playoff',round:comp+' Semi 2',group:'playoff',playoff:true,competition:comp,placeholderHome:age+' Pool B '+pos+'th',placeholderAway:age+' Pool A '+(pos+1)+'th'}); games.push({age,pool:'Playoff',round:comp+' Final',group:'playoff',playoff:true,competition:comp,placeholderHome:comp+' Semi 1 winner',placeholderAway:comp+' Semi 2 winner'}); }); };
     playoffForAge('O/11'); playoffForAge('O/12');
     const sl=slots(),fields=Array.from({length:state.fields},(_,i)=>String.fromCharCode(65+i));
+    const presidentSteynAges=new Set(selectedTeams().filter(isPresidentSteyn).map(t=>t.age));
+    const isRestrictedMatch=game=>isPresidentSteyn(game.home)||isPresidentSteyn(game.away)||(game.playoff&&presidentSteynAges.has(game.age));
+    const lateSlots=sl.filter(slot=>slot.minute>=16*60);
     function preferredFields(age){
       const preferred=age==='O/12'?'A':'B';
       return fields.includes(preferred)?[preferred,...fields.filter(f=>f!==preferred)]:fields.slice();
     }
     if(!sl.length){msg('No usable time slots. Check your day times.','error');return}
+    const restrictedGames=games.filter(isRestrictedMatch);
+    if(restrictedGames.length>lateSlots.length*fields.length){
+      msg('<b>President Steyn scheduling limit:</b> '+restrictedGames.length+' pool/playoff matches involving President Steyn teams, or their possible age-group playoff paths, require a start at or after 16:00. Only '+(lateSlots.length*fields.length)+' field slots are available after 16:00 across the selected tournament days. Extend the day times, add fields, or reduce the fixtures/duration.','error');return;
+    }
     if(games.length>sl.length*fields.length){msg('<b>'+games.length+' matches</b> need '+(sl.length*fields.length)+' available field slots. Add fields/time or reduce duration.','error');return}
 
     const last={},used={},teamSlot={},refUsed={},result=[];
@@ -135,6 +146,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
     const cupFinalSlotKeys=new Set(cupFinalSlotCount?sl.slice(-cupFinalSlotCount).map(slot=>slot.date+'|'+slot.time):[]);
 
     function canPlace(game,slot,key){
+      if(isRestrictedMatch(game)&&slot.minute<16*60)return false;
       if(game.home?.id && teamSlot[game.home.id]===key)return false;
       if(game.away?.id && teamSlot[game.away.id]===key)return false;
       if(game.home?.id && last[game.home.id]&&last[game.home.id].date===slot.date&&slot.minute-last[game.home.id].minute<state.duration+state.minRest)return false;
@@ -216,6 +228,10 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
       if(simulateOnly)simulationLog=result.map((m,i)=>simulationLine(m,i+1)).concat(remaining.map(m=>'UNSCHEDULED | '+simulationLine(m,'—')));
       preview=[];renderSchedule();
       if(simulateOnly)showSimulationLog();
+      if(remaining.some(isRestrictedMatch)){
+        msg('Could not fit every President Steyn pool/playoff fixture into available starts at or after 16:00 on the selected tournament days. Extend the day times, add fields, or reduce duration/rest time. '+remaining.length+' matches remain.','error');
+        return;
+      }
       msg('Could not place every match. Reduce rest time/duration or add fields. '+remaining.length+' matches remain.','error');
       return
     }
