@@ -109,12 +109,12 @@ async function inviteAdmin(){if(!admin||!online)return alert('Admin-toegang beno
 let resolvingPlayoffs=false;
 function poolSeedId(age,pool,place){
   const teams=data.teams.filter(t=>t.age===age&&String(t.pool||'').toUpperCase()===pool);
-  const rows=teams.map((team,index)=>({team,index,played:0,points:0,for:0,against:0}));
+  const rows=teams.map((team,index)=>({team,index,points:0,for:0,against:0}));
   const stats=new Map(rows.map(row=>[row.team.id,row]));
   data.matches.filter(m=>m.age===age&&m.pool===pool&&m.round==='Pool'&&m.status==='completed').forEach(m=>{
     const h=Number(m.homeScore)||0,a=Number(m.awayScore)||0,home=stats.get(m.homeId),away=stats.get(m.awayId);
     if(!home||!away)return;
-    home.played++;away.played++;home.for+=h;home.against+=a;away.for+=a;away.against+=h;
+    home.for+=h;home.against+=a;away.for+=a;away.against+=h;
     if(h===a){home.points+=2;away.points+=2}
     else if(h>a){home.points+=4;if(h-a<=7)away.points++}
     else{away.points+=4;if(a-h<=7)home.points++}
@@ -122,10 +122,31 @@ function poolSeedId(age,pool,place){
   rows.sort((a,b)=>b.points-a.points||(b.for-b.against)-(a.for-a.against)||b.for-a.for||a.index-b.index);
   return rows[place-1]?.team.id||null;
 }
+function refereeSchoolIndex(){
+  const teamSchools=new Map(),codes=new Map();
+  const schoolKey=value=>String(value||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase()
+    .replace(/\\b(laerskool|laer|hoerskool|primary|high|school|skool)\\b/g,'').replace(/[^a-z0-9]/g,'');
+  const codeKey=value=>String(value||'').toUpperCase().replace(/O\\s*\\/?\\s*1[12]/g,'').replace(/[^A-Z]/g,'');
+  data.teams.forEach(team=>{
+    const key=schoolKey(team.school);
+    if(team.id&&key)teamSchools.set(team.id,key);
+    const code=codeKey(team.short);
+    if(code&&key){if(!codes.has(code))codes.set(code,new Set());codes.get(code).add(key)}
+  });
+  const refSchools=new Map(data.refs.map(ref=>{
+    if(ref.teamId&&teamSchools.has(ref.teamId))return [ref.id,teamSchools.get(ref.teamId)];
+    const prefix=String(ref.name||'').trim().match(/^(.+?)\\s+ref\\s+\\d+$/i);
+    const matches=prefix?codes.get(codeKey(prefix[1])):null;
+    return [ref.id,matches?.size===1?[...matches][0]:matches?.size>1?'__AMBIGUOUS__':null];
+  }));
+  return {teamSchools,refSchools,schoolKey};
+}
 async function resolvePlayoffTeams(){
   if(!online||!admin||resolvingPlayoffs)return;
   resolvingPlayoffs=true;
   try{
+    const {teamSchools,refSchools,schoolKey}=refereeSchoolIndex();
+    const schoolForTeam=id=>teamSchools.get(id)||schoolKey(data.teams.find(t=>t.id===id)?.school);
     for(const age of ['O/11','O/12']){
       const poolMatches=data.matches.filter(m=>m.age===age&&m.round==='Pool');
       if(!poolMatches.length||poolMatches.some(m=>m.status!=='completed'))continue;
@@ -134,22 +155,31 @@ async function resolvePlayoffTeams(){
         const placeholder=match.notes.slice('PLAYOFF PLACEHOLDER |'.length).trim().split(' vs ');
         if(placeholder.length!==2)continue;
         const resolveSide=label=>{
-          const seed=/^O\/\d+\s+Pool\s+([A-Z])\s+place\s+(\d+)$/i.exec(label.trim());
+          const seed=/^O\\/\\d+\\s+Pool\\s+([A-Z])\\s+place\\s+(\\d+)$/i.exec(label.trim());
           if(seed)return poolSeedId(age,seed[1].toUpperCase(),Number(seed[2]));
-          const winner=/^(Cup|Shield|Plate) Game (\d+) winner$/i.exec(label.trim());
+          const winner=/^(Cup|Shield|Plate) Game (\\d+) winner$/i.exec(label.trim());
           if(!winner)return null;
-          const semi=data.matches.find(m=>m.age===age&&m.notes.startsWith('PLAYOFF PLACEHOLDER |')&&new RegExp('Semi\\s+'+winner[2]+'\\b','i').test(m.round));
+          const semi=data.matches.find(m=>m.age===age&&m.notes.startsWith('PLAYOFF PLACEHOLDER |')&&new RegExp('Semi\\\\s+'+winner[2]+'\\\\b','i').test(m.round));
           if(!semi||semi.status!=='completed'||!semi.homeId||!semi.awayId||semi.homeScore===semi.awayScore)return null;
           return semi.homeScore>semi.awayScore?semi.homeId:semi.awayId;
         };
         const homeId=resolveSide(placeholder[0]),awayId=resolveSide(placeholder[1]);
-        if(match.homeId===homeId&&match.awayId===awayId)continue;
-        const saved=await sb.from('matches').update({home_id:homeId,away_id:awayId}).eq('id',match.id);
+        let refId=null;
+        if(homeId&&awayId){
+          const homeSchool=schoolForTeam(homeId),awaySchool=schoolForTeam(awayId);
+          const eligible=ref=>ref.active!==false&&refSchools.get(ref.id)!=='__AMBIGUOUS__'&&
+            (!refSchools.get(ref.id)||![homeSchool,awaySchool].includes(refSchools.get(ref.id)))&&
+            !data.matches.some(other=>other.id!==match.id&&other.date===match.date&&other.time===match.time&&other.refId===ref.id);
+          const current=data.refs.find(ref=>ref.id===match.refId&&eligible(ref));
+          refId=current?.id||data.refs.find(eligible)?.id||null;
+        }
+        if(match.homeId===homeId&&match.awayId===awayId&&match.refId===refId)continue;
+        const saved=await sb.from('matches').update({home_id:homeId,away_id:awayId,referee_id:refId}).eq('id',match.id);
         if(saved.error)throw saved.error;
-        match.homeId=homeId;match.awayId=awayId;
+        match.homeId=homeId;match.awayId=awayId;match.refId=refId;
       }
     }
-  }catch(e){console.error('Could not resolve playoff teams',e)}
+  }catch(e){console.error('Could not resolve playoff teams and referees',e)}
   finally{resolvingPlayoffs=false}
 }
 async function refresh(){if(!online){data=localLoad();return}const [s,t,r,m,e]=await Promise.all([sb.from('tournament_settings').select('*').limit(1).maybeSingle(),sb.from('teams').select('*').order('name'),sb.from('referees').select('*').order('name'),sb.from('matches').select('*').order('match_date').order('match_time'),sb.from('match_events').select('*').order('created_at')]);for(const q of [s,t,r,m,e])if(q.error)throw q.error;if(s.data)data.settings={...data.settings,name:s.data.name||data.settings.name,subtitle:s.data.subtitle||'',dates:s.data.dates||data.settings.dates,location:s.data.location||'',logoUrl:s.data.logo_url||data.settings.logoUrl,primary:s.data.primary_color||data.settings.primary,accent:s.data.accent_color||data.settings.accent};data.teams=(t.data||[]).map(x=>({id:x.id||x.team_id||null,name:x.name,school:x.school||'',age:x.age,pool:x.pool||'A',short:x.short||x.short_name||'',logoUrl:x.logo_url||''})).filter(x=>isUuid(x.id));data.refs=(r.data||[]).map(x=>({id:x.id,name:x.name,level:x.level||x.qualification||'',teamId:x.team_id||null,active:x.active!==false}));data.matches=(m.data||[]).map(x=>({id:x.id,age:x.age,pool:x.pool||'A',round:x.round||'Pool',date:x.match_date||'',time:x.match_time?String(x.match_time).slice(0,5):'',field:x.field||'',homeId:x.home_id||x.home_team_id||null,awayId:x.away_id||x.away_team_id||null,refId:x.referee_id||null,homeScore:x.home_score||0,awayScore:x.away_score||0,status:x.status||'scheduled',period:x.period||0,clockSeconds:x.clock_seconds||0,clockRunning:!!x.clock_running,clockStartedAt:x.clock_started_at,completedAt:x.completed_at,notes:x.notes||''}));data.events=(e.data||[]).map(x=>({id:x.id,matchId:x.match_id,teamId:x.team_id,type:x.event_type,points:x.points,period:x.period,clockSeconds:x.clock_seconds,createdAt:x.created_at}));await resolvePlayoffTeams();}
