@@ -184,7 +184,6 @@ async function recordScore(matchId,teamId,type,points){
   if(!admin)return;
   const m=data.matches.find(x=>x.id===matchId);
   if(!m||m.status!=='live')return alert('Wedstryd moet LIVE wees voordat punte aangeteken kan word.');
-  if(elapsed(m)>=HALF_DURATION_SECONDS)return alert('Wedstrydhelfte het 6 minute bereik.');
   if(!teamId||teamId==='undefined'||teamId==='null')return alert('Span kon nie bepaal word nie.');
   const key=`${matchId}:${teamId}`;
   if(scoreBusy.has(key))return;
