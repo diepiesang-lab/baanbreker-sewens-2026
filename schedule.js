@@ -77,7 +77,7 @@
     if(a.length%2)a.push(null);
     const out=[],n=a.length;
     for(let r=0;r<n-1;r++){
-      for(let i=0;i<n/2;i++){const x=a[i],y=a[n-1-i];if(x&&y)out.push({home:r%2?y:x,away:r%2?x:y,poolRound:r+1})}
+      for(let i=0;i<n/2;i++){const x=a[i],y=a[n-1-i];if(x&&y)out.push({home:r%2?y:x,away:r%2?x:y})}
       a.splice(1,0,a.pop());
     }
     return out;
@@ -184,6 +184,7 @@ const playoffForOuderdom=(age)=>{
     };
     playoffForOuderdom('O/11'); playoffForOuderdom('O/12');
     const sl=slots(),fields=Array.from({length:state.fields},(_,i)=>String.fromCharCode(65+i));
+    const slotOrder=new Map(sl.map((slot,index)=>[slot.date+'|'+slot.time,index]));
     const presidentSteynOuderdoms=new Set(selectedTeams().filter(isPresidentSteyn).map(t=>t.age));
     const {teamSchools,refereeSchools}=refereeSchoolIndex();
     const schoolForTeam=team=>team?.id?teamSchools.get(team.id)||schoolIdentity(team.school):'';
@@ -225,7 +226,8 @@ const playoffForOuderdom=(age)=>{
       if(game.round==='Pool'){
         for(const team of [game.home,game.away]){
           const previousRound=team?.id?teamLastPoolRound[team.id]:null;
-          if(previousRound!=null&&Math.abs(Number(game.poolRound)-previousRound)<=1)return false;
+          const currentRound=slotOrder.get(key);
+          if(previousRound?.date===slot.date&&currentRound-previousRound.index<=1)return false;
         }
       }
       if(game.home?.id && last[game.home.id]&&last[game.home.id].date===slot.date&&slot.minute-last[game.home.id].minute<state.duration+state.minRest)return false;
@@ -246,8 +248,9 @@ const playoffForOuderdom=(age)=>{
       if(placed.home?.id){last[placed.home.id]={date:placed.date,minute:placed.minute};teamSlot[placed.home.id]=key}
       if(placed.away?.id){last[placed.away.id]={date:placed.date,minute:placed.minute};teamSlot[placed.away.id]=key}
       if(placed.round==='Pool'){
-        if(placed.home?.id)teamLastPoolRound[placed.home.id]=Number(placed.poolRound);
-        if(placed.away?.id)teamLastPoolRound[placed.away.id]=Number(placed.number);
+        const scheduledRound={date:placed.date,index:slotOrder.get(key)};
+        if(placed.home?.id)teamLastPoolRound[placed.home.id]=scheduledRound;
+        if(placed.away?.id)teamLastPoolRound[placed.away.id]=scheduledRound;
       }
       if(placed.refId){refUsed[key+'|'+placed.refId]=true;refLoad.set(placed.refId,(refLoad.get(placed.refId)||0)+1)}
       result.push(placed);
