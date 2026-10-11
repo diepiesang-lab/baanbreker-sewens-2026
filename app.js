@@ -124,9 +124,9 @@ function poolSeedId(age,pool,place){
 }
 function refereeSchoolIndex(){
   const teamSchools=new Map(),codes=new Map();
-  const schoolKey=value=>String(value||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase()
-    .replace(/\\b(laerskool|laer|hoerskool|primary|high|school|skool)\\b/g,'').replace(/[^a-z0-9]/g,'');
-  const codeKey=value=>String(value||'').toUpperCase().replace(/O\\s*\\/?\\s*1[12]/g,'').replace(/[^A-Z]/g,'');
+  const schoolKey=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+    .replace(/\b(laerskool|laer|hoerskool|primary|high|school|skool)\b/g,'').replace(/[^a-z0-9]/g,'');
+  const codeKey=value=>String(value||'').toUpperCase().replace(/O\s*\/?\s*1[12]/g,'').replace(/[^A-Z]/g,'');
   data.teams.forEach(team=>{
     const key=schoolKey(team.school);
     if(team.id&&key)teamSchools.set(team.id,key);
@@ -135,7 +135,7 @@ function refereeSchoolIndex(){
   });
   const refSchools=new Map(data.refs.map(ref=>{
     if(ref.teamId&&teamSchools.has(ref.teamId))return [ref.id,teamSchools.get(ref.teamId)];
-    const prefix=String(ref.name||'').trim().match(/^(.+?)\\s+ref\\s+\\d+$/i);
+    const prefix=String(ref.name||'').trim().match(/^(.+?)\s+ref\s+\d+$/i);
     const matches=prefix?codes.get(codeKey(prefix[1])):null;
     return [ref.id,matches?.size===1?[...matches][0]:matches?.size>1?'__AMBIGUOUS__':null];
   }));
@@ -155,11 +155,11 @@ async function resolvePlayoffTeams(){
         const placeholder=match.notes.slice('PLAYOFF PLACEHOLDER |'.length).trim().split(' vs ');
         if(placeholder.length!==2)continue;
         const resolveSide=label=>{
-          const seed=/^O\\/\\d+\\s+Pool\\s+([A-Z])\\s+place\\s+(\\d+)$/i.exec(label.trim());
+          const seed=/^O\/\d+\s+Pool\s+([A-Z])\s+place\s+(\d+)$/i.exec(label.trim());
           if(seed)return poolSeedId(age,seed[1].toUpperCase(),Number(seed[2]));
-          const winner=/^(Cup|Shield|Plate) Game (\\d+) winner$/i.exec(label.trim());
+          const winner=/^(Cup|Shield|Plate) Game (\d+) winner$/i.exec(label.trim());
           if(!winner)return null;
-          const semi=data.matches.find(m=>m.age===age&&m.notes.startsWith('PLAYOFF PLACEHOLDER |')&&new RegExp('Semi\\\\s+'+winner[2]+'\\\\b','i').test(m.round));
+          const semi=data.matches.find(m=>m.age===age&&m.notes.startsWith('PLAYOFF PLACEHOLDER |')&&new RegExp('Semi\\s+'+winner[2]+'\\b','i').test(m.round));
           if(!semi||semi.status!=='completed'||!semi.homeId||!semi.awayId||semi.homeScore===semi.awayScore)return null;
           return semi.homeScore>semi.awayScore?semi.homeId:semi.awayId;
         };
