@@ -150,6 +150,12 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
       if(isRestrictedMatch(game)&&slot.minute<presidentSteynStartMinute(slot))return false;
       if(game.home?.id && teamSlot[game.home.id]===key)return false;
       if(game.away?.id && teamSlot[game.away.id]===key)return false;
+      const backToBack=teamId=>{
+        const previous=last[teamId];
+        return !game.playoff&&!previous?.playoff&&previous?.date===slot.date&&slot.minute-previous.minute<=state.duration+state.break;
+      };
+      if(game.home?.id&&backToBack(game.home.id))return false;
+      if(game.away?.id&&backToBack(game.away.id))return false;
       if(game.home?.id && last[game.home.id]&&last[game.home.id].date===slot.date&&slot.minute-last[game.home.id].minute<state.duration+state.minRest)return false;
       if(game.away?.id && last[game.away.id]&&last[game.away.id].date===slot.date&&slot.minute-last[game.away.id].minute<state.duration+state.minRest)return false;
       return true;
@@ -161,8 +167,8 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
       if(state.autoRefs&&refs.length&&!ref)return false;
       const placed={...game,date:slot.date,time:slot.time,minute:slot.minute,field,refId:ref?.id||null};
       used[key+'|'+field]=true;
-      if(placed.home?.id){last[placed.home.id]={date:placed.date,minute:placed.minute};teamSlot[placed.home.id]=key}
-      if(placed.away?.id){last[placed.away.id]={date:placed.date,minute:placed.minute};teamSlot[placed.away.id]=key}
+      if(placed.home?.id){last[placed.home.id]={date:placed.date,minute:placed.minute,playoff:!!placed.playoff};teamSlot[placed.home.id]=key}
+      if(placed.away?.id){last[placed.away.id]={date:placed.date,minute:placed.minute,playoff:!!placed.playoff};teamSlot[placed.away.id]=key}
       if(placed.refId)refUsed[key+'|'+placed.refId]=true;
       result.push(placed);
       return true;
