@@ -320,7 +320,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
     if(!confirm('CLEAR SCORES ONLY? This will keep teams, referees and the full schedule, but reset all match scores and live scoring state.'))return;
     try{
       msg('Resetting tournament data…');
-      const r=await sb.from('matches').update({home_score:0,away_score:0,status:'scheduled',clock_running:false,clock_seconds:420,clock_started_at:null,current_half:1}).neq('status','__never__');
+      const r=await sb.from('matches').update({home_score:0,away_score:0,status:'scheduled',clock_running:false,clock_seconds:0,clock_started_at:null,current_half:1}).neq('status','__never__');
       if(r.error)throw r.error;
       const ev=await sb.from('match_events').delete().not('id','is',null);
       if(ev.error && !/relation .* does not exist|table .* does not exist/i.test(ev.error.message))throw ev.error;
