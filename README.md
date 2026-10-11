@@ -11,11 +11,11 @@ Run **only** `supabase_repair_current.sql` once in Supabase SQL Editor. It adds 
 Do not expose a Supabase service-role key in the browser.
 
 ## Match clock
-- 7 minutes per half (420 seconds)
+- 6 minutes per half (360 seconds)
 - Start / pause / resume
-- First half automatically stops at 7:00
+- First half automatically stops at 6:00
 - Admin starts the second half
-- Second half automatically ends the match at 7:00
+- Second half automatically ends the match at 6:00
 - Live score events are stored with period and clock time
 - Undo last scoring event
 - Realtime updates across devices
