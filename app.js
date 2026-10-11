@@ -261,10 +261,10 @@ function schoolRefGroups(){
   return [...groups.values()].map(group=>{
     const votes=new Map();
     group.teams.forEach(team=>{
-      const code=String(team.short||'').toUpperCase().replace(/O\s*\/?\s*1[12]/g,'').replace(/(?:11|12)$/,'').replace(/[^A-Z]/g,'');
+      const code=String(team.short||'').toUpperCase().replace(/O\s*\/?\s*1[12]/g,'').replace(/\d+$/,'').replace(/[^A-Z]/g,'');
       if(code)votes.set(code,(votes.get(code)||0)+1);
     });
-    let short=[...votes.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
+    let short=[...votes.entries()].sort((a,b)=>b[1]-a[1]||b[0].length-a[0].length||a[0].localeCompare(b[0]))[0]?.[0]||'';
     if(!short){
       const cleaned=group.school.replace(/\b(laerskool|laer|ho[eë]rskool|primary school|primary|high school|school)\b/gi,' ').trim();
       const words=cleaned.split(/\s+/).filter(Boolean);
