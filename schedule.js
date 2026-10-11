@@ -5,7 +5,7 @@
   const sb = online ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey) : null;
   const STORE='baanbreker_schedule_builder_v2';
   const SIMULATION_NOTE='SIMULATION_SCORE_TEST';
-  let teams=[], refs=[], preview=[], loaded=false, poolPlan={}, simulationLog=[];
+  let teams=[], refs=[], preview=[], existingMatches=[], loaded=false, poolPlan={}, simulationLog=[];
 
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   const get=id=>document.getElementById(id), val=id=>get(id)?.value||'', checked=id=>!!get(id)?.checked;
@@ -26,13 +26,16 @@
   async function loadTeams(){
     if(!online){teams=[];refs=[];loaded=true;renderSchedule();return}
     msg('Loading teams and referees…');
-    const [tr,rr]=await Promise.all([
+    const [tr,rr,mr]=await Promise.all([
       sb.from('teams').select('id,name,school,short,age,pool,active,logo_url').eq('active',true).order('age').order('name'),
-      sb.from('referees').select('id,name,active,team_id').eq('active',true).order('name')
+      sb.from('referees').select('id,name,active,team_id').eq('active',true).order('name'),
+      sb.from('matches').select('match_date,match_time,field,status')
     ]);
     if(tr.error){msg('Could not load teams: '+esc(tr.error.message),'error');return}
+    if(mr.error){msg('Could not load the current schedule for match numbering: '+esc(mr.error.message),'error');return}
     teams=(tr.data||[]).filter(t=>t.id).map(t=>({...t,name:t.name||'',school:t.school||'',short:t.short||'',pool:String(t.pool||'').toUpperCase(),logo_url:t.logo_url||''}));
     refs=rr.error?[]:(rr.data||[]);
+    existingMatches=(mr.data||[]).map(m=>({date:m.match_date||'',time:m.match_time?String(m.match_time).slice(0,5):'',field:m.field||'',status:m.status||'scheduled'}));
     loaded=true; buildPoolPlan(); renderSchedule();
   }
 
@@ -259,6 +262,10 @@ const playoffForAge=(age)=>{
       return
     }
     preview=result.sort((a,b)=>(a.date+a.time+a.field).localeCompare(b.date+b.time+b.field));
+    const retainedMatches=existingMatches.filter(m=>!state.replace||m.status!=='scheduled');
+    [...retainedMatches,...preview].sort((a,b)=>(a.date+a.time+a.field).localeCompare(b.date+b.time+b.field)).forEach((m,index)=>{
+      if(preview.includes(m))m.matchNumber=index+1;
+    });
     if(simulateOnly)simulationLog=preview.map((m,i)=>simulationLine(m,i+1));
     renderSchedule();
     if(simulateOnly){showSimulationLog();msg('<b>Simulation complete:</b> '+preview.length+' matches generated. Log shown below and written to the browser console. No matches were saved.','success')}
@@ -381,7 +388,7 @@ const playoffForAge=(age)=>{
   function renderSchedule(){
     const app=get('app');if(!app||!window.__baanbrekerScheduleActive)return;
     const grouped={};preview.forEach(m=>(grouped[m.date]??=[]).push(m));
-    const previewHtml=preview.length?Object.entries(grouped).map(([date,ms])=>'<section class="schedule-preview"><div class="preview-head"><div><span>'+esc(dateLabel(date))+'</span><h3>'+ms.length+' matches</h3></div><div class="preview-badge">'+esc(state.fields)+' fields</div></div><div class="schedule-table-wrap"><table class="schedule-table"><thead><tr><th>Time</th><th>Field</th><th>Age</th><th>Pool</th><th>Home</th><th>Score</th><th>Away</th><th>Referee</th></tr></thead><tbody>'+ms.map(m=>'<tr><td><b>'+esc(m.time)+'</b></td><td>Field '+esc(m.field)+'</td><td>'+esc(m.age)+'</td><td><span class="pool-pill">'+esc(m.pool)+'</span></td><td><b>'+esc(m.home?.id?(m.home.name||short(m.home)):(m.placeholderHome||'TBD'))+'</b></td><td>—</td><td><b>'+esc(m.away?.id?(m.away.name||short(m.away)):(m.placeholderAway||'TBD'))+'</b></td><td>'+esc(refs.find(r=>r.id===m.refId)?.name||'—')+'</td></tr>').join('')+'</tbody></table></div></section>').join(''):'<section class="schedule-preview empty"><h3>Your schedule preview will appear here</h3><p>Select teams, configure pools and generate the schedule.</p></section>';
+    const previewHtml=preview.length?Object.entries(grouped).map(([date,ms])=>'<section class="schedule-preview"><div class="preview-head"><div><span>'+esc(dateLabel(date))+'</span><h3>'+ms.length+' matches</h3></div><div class="preview-badge">'+esc(state.fields)+' fields</div></div><div class="schedule-table-wrap"><table class="schedule-table"><thead><tr><th>Match</th><th>Time</th><th>Field</th><th>Age</th><th>Pool</th><th>Home</th><th>Score</th><th>Away</th><th>Referee</th></tr></thead><tbody>'+ms.map(m=>'<tr><td><b>'+esc(m.matchNumber)+'</b></td><td><b>'+esc(m.time)+'</b></td><td>Field '+esc(m.field)+'</td><td>'+esc(m.age)+'</td><td><span class="pool-pill">'+esc(m.pool)+'</span></td><td><b>'+esc(m.home?.id?(m.home.name||short(m.home)):(m.placeholderHome||'TBD'))+'</b></td><td>—</td><td><b>'+esc(m.away?.id?(m.away.name||short(m.away)):(m.placeholderAway||'TBD'))+'</b></td><td>'+esc(refs.find(r=>r.id===m.refId)?.name||'—')+'</td></tr>').join('')+'</tbody></table></div></section>').join(''):'<section class="schedule-preview empty"><h3>Your schedule preview will appear here</h3><p>Select teams, configure pools and generate the schedule.</p></section>';
     app.innerHTML='<aside class="sidebar"><div class="brand"><div class="brand-logo image-logo"><img src="baanbreker-logo.png" alt=""></div><div><b>Laerskool Baanbreker Sewens</b><small>2026 Rugby Sewens Toernooi</small></div></div><div class="nav"><button onclick="scheduleBack()">← Dashboard</button><button class="active">Schedule Builder</button></div><div class="side-foot"><span class="dot '+(online?'live':'demo')+'"></span>'+(online?'Online database':'Demo mode')+'</div></aside><section class="page schedule-page"><header><div class="header-brand"><img class="header-logo" src="baanbreker-logo.png" alt=""><div><span class="eyebrow">16–17 October 2026 · Laerskool Baanbreker</span><h1>Schedule Builder</h1><p>Set the teams. The system calculates the pools and builds the fixture list.</p></div></div></header><main><div class="schedule-topbar"><div><h2>1. Choose teams</h2><p>Select the teams that should participate. Pools are calculated automatically.</p></div><div class="top-actions"><button onclick="loadScheduleTeams()">↻ Refresh</button><button onclick="toggleScheduleTeams(true)">Select all</button><button onclick="toggleScheduleTeams(false)">Clear</button></div></div><div id="team-summary" class="schedule-summary"></div><section class="team-picker" id="schedule-teams"><div class="empty">Loading teams…</div></section>'+controls()+'<div class="schedule-topbar preview-title"><div><h2>4. Schedule preview</h2><p>Check the generated fixtures before saving them to the tournament.</p></div></div>'+previewHtml+'</main></section>';
     renderTeams();updatePoolUi();
   }
