@@ -13,8 +13,9 @@ const localSave=()=>{try{localStorage.setItem(KEY,JSON.stringify(data))}catch{};
 const teamName=id=>data.teams.find(t=>t.id===id)?.name||'TBD';
 const refName=id=>data.refs.find(r=>r.id===id)?.name||'Geen skeidsregter';
 const matchesFor=()=>data.matches.filter(m=>m.age===age&&(pool==='All'||m.pool===pool));
-const fmtClock=s=>{s=Math.max(0,Math.min(420,Math.floor(s||0)));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
-function elapsed(m){if(!m)return 0;let s=Number(m.clockSeconds||0);if(m.clockRunning&&m.clockStartedAt)s+=Math.floor((Date.now()-new Date(m.clockStartedAt).getTime())/1000);return Math.min(420,Math.max(0,s))}
+const HALF_DURATION_SECONDS=6*60;
+const fmtClock=s=>{s=Math.max(0,Math.min(HALF_DURATION_SECONDS,Math.floor(s||0)));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
+function elapsed(m){if(!m)return 0;let s=Number(m.clockSeconds||0);if(m.clockRunning&&m.clockStartedAt)s+=Math.floor((Date.now()-new Date(m.clockStartedAt).getTime())/1000);return Math.min(HALF_DURATION_SECONDS,Math.max(0,s))}
 function timerLabel(m){if(!m)return '00:00';return fmtClock(elapsed(m))}
 function statusLabel(s){return s==='live'?'● LIVE':s==='completed'?'Voltooi':'Geskeduleer'}
 function render(){
@@ -95,7 +96,7 @@ function screenView(){
   games.sort((a,b)=>String(a.field||'').localeCompare(String(b.field||''))||String(a.age||'').localeCompare(String(b.age||'')));
   return `<div class="big-screen"><div class="big-screen-heading"><div><span class="screen-meta">${esc(anchor.date||'')} · ${esc(anchor.time||'')}</span><h2>${live.length?'Live wedstryde':'Volgende wedstryde'}</h2></div><span class="screen-live-count">${live.length} LIVE</span></div><div class="big-screen-game-grid">${games.map(m=>`<article class="big-screen-game" id="screen-game-${esc(m.id)}"><div class="screen-game-meta"><span>${esc(m.age)} · ${esc(m.round||'Pool')} · Veld ${esc(m.field||'—')}</span><b class="${m.status==='live'?'is-live':''}">${m.status==='live'?'● LIVE':m.status==='completed'?'VOLTOOI':'VOLGENDE'}</b></div><div class="screen-game-time">${m.status==='live'?timerLabel(m):'— — : — —'}</div><div class="screen-game-teams"><div class="screen-game-team"><b>${esc(teamName(m.homeId))}</b><strong>${m.homeScore??0}</strong></div><em>VS</em><div class="screen-game-team away"><strong>${m.awayScore??0}</strong><b>${esc(teamName(m.awayId))}</b></div></div><div class="screen-game-ref">👨‍⚖️ ${esc(refName(m.refId))}</div></article>`).join('')}</div></div>`;
 }
-function rulesView(){return `<section class="panel rules"><h2>Reëls</h2><h3>Puntetoekenning</h3><ul><li>Drie — <b>5 punte</b></li><li>Doelskop / conversion — <b>2 punte</b></li><li>Strafskop — <b>3 punte</b></li><li>Drop-doel — <b>3 punte</b></li></ul><h3>Wedstrydtyd</h3><p>Elke helfte is 7 minute. Ná 7 minute stop die eerste helfte outomaties; die admin begin die tweede helfte wanneer die spanne gereed is. Ná 7 minute van die tweede helfte word die wedstryd outomaties voltooi.</p></section>`}
+function rulesView(){return `<section class="panel rules"><h2>Reëls</h2><h3>Puntetoekenning</h3><ul><li>Drie — <b>5 punte</b></li><li>Doelskop / conversion — <b>2 punte</b></li><li>Strafskop — <b>3 punte</b></li><li>Drop-doel — <b>3 punte</b></li></ul><h3>Wedstrydtyd</h3><p>Elke helfte is 6 minute. Ná 6 minute stop die eerste helfte outomaties; die admin begin die tweede helfte wanneer die spanne gereed is. Ná 6 minute van die tweede helfte word die wedstryd outomaties voltooi.</p></section>`}
 function adminView(){if(!admin)return `<div class="panel empty"><h2>Admin toegang</h2><p>Meld aan met jou Supabase admin-rekening om die toernooi te bestuur.</p><button class="primary" onclick="toggleAdmin()">Meld aan</button></div>`;return `<div class="title-row"><div><h2>Admin-kontroles</h2><p>${esc(user?.email||'')} · Volledige bestuur</p></div><button class="danger" onclick="signOut()">Meld af</button></div><div class="admin-grid"><section class="panel"><h3>Branding</h3><label>Toernooi naam<input id="s_name" value="${esc(data.settings.name)}"></label><label>Subtitel<input id="s_sub" value="${esc(data.settings.subtitle)}"></label><label>Datums<input id="s_dates" value="${esc(data.settings.dates)}"></label><label>Plek<input id="s_loc" value="${esc(data.settings.location)}"></label><button class="primary" onclick="saveSettings()">Stoor</button></section><section class="panel"><h3>Admin-bestuur</h3><label>Nuwe admin e-pos<input id="invite_email" type="email" placeholder="admin@example.com"></label><button class="primary" onclick="inviteAdmin()">Stuur admin-uitnodiging</button><p id="invite_status" class="muted"></p></section></div>`}
 function val(id){return document.getElementById(id)?.value||''}
 function modal(inner){const d=document.createElement('div');d.className='modal';d.innerHTML=`<div class="modalbox">${inner}</div>`;document.body.appendChild(d);return d}
@@ -137,7 +138,7 @@ function scoringView(){
     const other=games.filter(m=>m.field!=='A'&&m.field!=='B');
     return `<section class="score-time-slot"><h3>${esc(date||'Datum onbekend')} · ${esc(time||'Tyd onbekend')}</h3>${main.length?`<div class="score-concurrent-grid">${main.map(scorePanel).join('')}</div>`:''}${other.length?`<details class="score-other-fields"><summary>Ander velde (${other.length})</summary><div class="score-concurrent-grid">${other.map(scorePanel).join('')}</div></details>`:''}</section>`;
   }).join('');
-  return `<div class="title-row"><div><h2>Live telling</h2><p>Velde A en B se gelyktydige wedstryde verskyn saam · 7 minute per helfte.</p></div></div><div class="filters"><select onchange="scoreAge=this.value;render()"><option value="All" ${scoreAge==='All'?'selected':''}>Albei ouderdomsgroepe</option><option value="O/11" ${scoreAge==='O/11'?'selected':''}>O/11</option><option value="O/12" ${scoreAge==='O/12'?'selected':''}>O/12</option></select><select onchange="scorePool=this.value;render()"><option value="All" ${scorePool==='All'?'selected':''}>Alle poele</option>${['A','B','C','D'].map(p=>`<option value="${p}" ${scorePool===p?'selected':''}>${p}</option>`).join('')}</select></div><div class="score-time-slots">${slotHtml||empty('Geen wedstryde vir hierdie filter nie.')}</div>`;
+  return `<div class="title-row"><div><h2>Live telling</h2><p>Velde A en B se gelyktydige wedstryde verskyn saam · 6 minute per helfte.</p></div></div><div class="filters"><select onchange="scoreAge=this.value;render()"><option value="All" ${scoreAge==='All'?'selected':''}>Albei ouderdomsgroepe</option><option value="O/11" ${scoreAge==='O/11'?'selected':''}>O/11</option><option value="O/12" ${scoreAge==='O/12'?'selected':''}>O/12</option></select><select onchange="scorePool=this.value;render()"><option value="All" ${scorePool==='All'?'selected':''}>Alle poele</option>${['A','B','C','D'].map(p=>`<option value="${p}" ${scorePool===p?'selected':''}>${p}</option>`).join('')}</select></div><div class="score-time-slots">${slotHtml||empty('Geen wedstryde vir hierdie filter nie.')}</div>`;
 }
 function teamShort(tid){const t=data.teams.find(x=>x.id===tid);return t?.short||((t?.name||'TBD').trim().split(/\s+/).map(x=>x[0]).join('').slice(0,4).toUpperCase())||'TBD'}
 function teamLogo(tid){const t=data.teams.find(x=>x.id===tid);return t?.logoUrl?`<img class="score-team-logo" src="${esc(t.logoUrl)}" alt="">`:`<span class="score-team-logo-fallback">${esc(teamShort(tid).slice(0,3))}</span>`}
@@ -158,7 +159,7 @@ function scorePanel(m){
     <div class="score-main-grid">
       <div class="score-team-card home"><div class="score-team-logo-wrap">${teamLogo(m.homeId)}</div><span class="score-short">${esc(homeName)}</span><strong>${m.homeScore||0}</strong></div>
       <div class="score-center"><div class="score-period">${c}</div><div class="live-clock"><strong>${timerLabel(m)}</strong><small>${running?'● LIVE':'KLOK GESTOP'}</small></div>
-        <div class="timer-controls">${period===0?`<button class="primary" onclick="startMatch('${m.id}')">▶ BEGIN</button>`:''}${period>0&&running?`<button onclick="pauseMatch('${m.id}')">⏸ POUSE</button>`:''}${period===1&&!running&&elapsed(m)<420?`<button class="primary" onclick="startMatch('${m.id}')">▶ HERVAT</button>`:''}${period===1&&!running&&elapsed(m)>=420?`<button class="primary" onclick="startSecondHalf('${m.id}')">▶ 2DE HELFTE</button>`:''}${period===2&&!running&&elapsed(m)<420?`<button class="primary" onclick="startMatch('${m.id}')">▶ HERVAT</button>`:''}${period>0?`<button class="danger" onclick="endMatch('${m.id}')">■ EINDIG</button>`:''}</div>
+        <div class="timer-controls">${period===0?`<button class="primary" onclick="startMatch('${m.id}')">▶ BEGIN</button>`:''}${period>0&&running?`<button onclick="pauseMatch('${m.id}')">⏸ POUSE</button>`:''}${period===1&&!running&&elapsed(m)<HALF_DURATION_SECONDS?`<button class="primary" onclick="startMatch('${m.id}')">▶ HERVAT</button>`:''}${period===1&&!running&&elapsed(m)>=HALF_DURATION_SECONDS?`<button class="primary" onclick="startSecondHalf('${m.id}')">▶ 2DE HELFTE</button>`:''}${period===2&&!running&&elapsed(m)<HALF_DURATION_SECONDS?`<button class="primary" onclick="startMatch('${m.id}')">▶ HERVAT</button>`:''}${period>0?`<button class="danger" onclick="endMatch('${m.id}')">■ EINDIG</button>`:''}</div>
       </div>
       <div class="score-team-card away"><div class="score-team-logo-wrap">${teamLogo(m.awayId)}</div><span class="score-short">${esc(awayName)}</span><strong>${m.awayScore||0}</strong></div>
     </div>
@@ -176,13 +177,14 @@ async function deleteRef(id,btn){if(!admin||!confirm('Verwyder hierdie skeidsreg
 async function startMatch(id){if(!admin)return;const m=data.matches.find(x=>x.id===id);if(!m)return;const now=new Date().toISOString();const next={period:m.period||1,clockSeconds:Number(m.clockSeconds||0),clockRunning:true,clockStartedAt:now,status:'live'};Object.assign(m,next);render();try{if(online){const q=await sb.from('matches').update({period:next.period,clock_seconds:next.clockSeconds,clock_running:true,clock_started_at:now,status:'live'}).eq('id',id);if(q.error)throw q.error;await refresh();render()}}catch(e){m.clockRunning=false;m.clockStartedAt=null;render();alert('Wedstryd kon nie begin nie: '+(e?.message||e))}}
 async function startSecondHalf(id){if(!admin)return;const m=data.matches.find(x=>x.id===id);if(!m)return;const now=new Date().toISOString();Object.assign(m,{period:2,clockSeconds:0,clockRunning:true,clockStartedAt:now,status:'live'});render();try{if(online){const q=await sb.from('matches').update({period:2,clock_seconds:0,clock_running:true,clock_started_at:now,status:'live'}).eq('id',id);if(q.error)throw q.error;await refresh();render()}}catch(e){m.clockRunning=false;m.clockStartedAt=null;render();alert('2de helfte kon nie begin nie: '+(e?.message||e))}}
 async function pauseMatch(id){if(!admin)return;const m=data.matches.find(x=>x.id===id);if(!m)return;const sec=elapsed(m);try{if(online){const q=await sb.from('matches').update({clock_seconds:sec,clock_running:false,clock_started_at:null}).eq('id',id);if(q.error)throw q.error;await refresh()}else{m.clockSeconds=sec;m.clockRunning=false;m.clockStartedAt=null;render()}}catch(e){alert(e.message)}}
-async function endMatch(id){if(!admin)return;const m=data.matches.find(x=>x.id===id);if(!m)return;try{if(online){const q=await sb.from('matches').update({clock_seconds:Math.min(420,elapsed(m)),clock_running:false,clock_started_at:null,status:'completed',completed_at:new Date().toISOString()}).eq('id',id);if(q.error)throw q.error;await refresh()}else{m.clockSeconds=420;m.clockRunning=false;m.status='completed';render()}}catch(e){alert(e.message)}}
+async function endMatch(id){if(!admin)return;const m=data.matches.find(x=>x.id===id);if(!m)return;try{if(online){const q=await sb.from('matches').update({clock_seconds:Math.min(HALF_DURATION_SECONDS,elapsed(m)),clock_running:false,clock_started_at:null,status:'completed',completed_at:new Date().toISOString()}).eq('id',id);if(q.error)throw q.error;await refresh()}else{m.clockSeconds=HALF_DURATION_SECONDS;m.clockRunning=false;m.status='completed';render()}}catch(e){alert(e.message)}}
 async function resetMatch(id){if(!admin||!confirm('Reset wedstryd en telling?'))return;try{if(online){const q=await sb.from('matches').update({home_score:0,away_score:0,status:'scheduled',period:0,clock_seconds:0,clock_running:false,clock_started_at:null,completed_at:null}).eq('id',id);if(q.error)throw q.error;const d=await sb.from('match_events').delete().eq('match_id',id);if(d.error)throw d.error;await refresh()}else{const m=data.matches.find(x=>x.id===id);if(m){Object.assign(m,{homeScore:0,awayScore:0,status:'scheduled',period:0,clockSeconds:0,clockRunning:false,clockStartedAt:null});data.events=data.events.filter(e=>e.matchId!==id);render()}}}catch(e){alert(e.message)}}
 const scoreBusy=new Set();
 async function recordScore(matchId,teamId,type,points){
   if(!admin)return;
   const m=data.matches.find(x=>x.id===matchId);
   if(!m||m.status!=='live')return alert('Wedstryd moet LIVE wees voordat punte aangeteken kan word.');
+  if(elapsed(m)>=HALF_DURATION_SECONDS)return alert('Wedstrydhelfte het 6 minute bereik.');
   if(!teamId||teamId==='undefined'||teamId==='null')return alert('Span kon nie bepaal word nie.');
   const key=`${matchId}:${teamId}`;
   if(scoreBusy.has(key))return;
@@ -263,20 +265,20 @@ async function tick(){
     const sec=elapsed(m);
     document.querySelectorAll('#score-'+m.id+' .live-clock').forEach(el=>el.textContent=fmtClock(sec));
     if(m.id && view==='screen'){const screenClock=document.getElementById('screen-game-'+m.id)?.querySelector('.screen-game-time');if(screenClock)screenClock.textContent=fmtClock(sec)}
-    if(sec>=420 && !tickBusy){
+    if(sec>=HALF_DURATION_SECONDS && !tickBusy){
       tickBusy=true;
       try{
         if(online){
           if((m.period||1)===1){
-            const q=await sb.from('matches').update({clock_seconds:420,clock_running:false,clock_started_at:null}).eq('id',m.id);
+            const q=await sb.from('matches').update({clock_seconds:HALF_DURATION_SECONDS,clock_running:false,clock_started_at:null}).eq('id',m.id);
             if(q.error)throw q.error;
           }else{
-            const q=await sb.from('matches').update({clock_seconds:420,clock_running:false,clock_started_at:null,status:'completed',completed_at:new Date().toISOString()}).eq('id',m.id);
+            const q=await sb.from('matches').update({clock_seconds:HALF_DURATION_SECONDS,clock_running:false,clock_started_at:null,status:'completed',completed_at:new Date().toISOString()}).eq('id',m.id);
             if(q.error)throw q.error;
           }
           await refresh();
         }else{
-          m.clockSeconds=420;m.clockRunning=false;m.clockStartedAt=null;
+          m.clockSeconds=HALF_DURATION_SECONDS;m.clockRunning=false;m.clockStartedAt=null;
           if((m.period||1)===2)m.status='completed';
         }
         render();
