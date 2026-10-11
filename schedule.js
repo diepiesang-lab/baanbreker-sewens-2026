@@ -155,7 +155,7 @@ const playoffForOuderdom=(age)=>{
       const pools=poolPlan[age]||[];
       if(pools.length!==2)return;
       const enough=(place)=>pools.every(p=>p.length>=place);
-      const seed=(pool,place)=>age+' Poel '+pool+' place '+place;
+      const seed=(pool,place)=>age+' Pool '+pool+' place '+place;
       const add=(competition,round,home,away,gameNumber,requiredVeld)=>games.push({age,pool:competition+' '+(round.includes('Semi')?'Semi-final':'Final'),round,group:'playoff',playoff:true,competition,gameNumber,requiredVeld,placeholderHome:home,placeholderAway:away});
 
       if(enough(2)){
@@ -188,7 +188,7 @@ const playoffForOuderdom=(age)=>{
     const {teamSchools,refereeSchools}=refereeSchoolIndex();
     const schoolForTeam=team=>team?.id?teamSchools.get(team.id)||schoolIdentity(team.school):'';
     const possibleSchoolsForPlaceholder=(label,age)=>{
-      const seed=String(label||'').match(/^O\/\d+\s+Poel\s+([A-Z])\s+place\s+\d+$/i);
+      const seed=String(label||'').match(/^O\/\d+\s+Pool\s+([A-Z])\s+place\s+\d+$/i);
       const candidates=seed?teams.filter(t=>t.age===age&&String(t.pool||'').toUpperCase()===seed[1].toUpperCase()):/winner$/i.test(String(label||''))?teams.filter(t=>t.age===age):[];
       return candidates.map(schoolForTeam).filter(Boolean);
     };
@@ -254,10 +254,10 @@ const playoffForOuderdom=(age)=>{
       return true;
     }
 
-    // Schedule slot-by-slot. This is the important field rule:
+    // Skeduleer tydgleuf vir tydgleuf. Die belangrike veldreël is:
     // O/12 gets Veld A first and O/11 gets Veld B first.
     // O/11 is never put on A while an O/12 match is still waiting for that slot.
-    // After all O/12 wedstryde have been scheduled, O/11 may use A as well.
+    // Nadat al die O/12-wedstryde geskeduleer is, kan O/11 ook Veld A gebruik.
     for(const slot of sl){
       const key=slot.date+'|'+slot.time;
       const poolStageActive=remaining.some(g=>g.round==='Pool');
@@ -286,7 +286,7 @@ const playoffForOuderdom=(age)=>{
         if(o11a && placeGame(o11a,slot,'A')) remaining.splice(remaining.indexOf(o11a),1);
       }
 
-      // Other velde can be used without breaking the A/B priority.
+      // Ander velde kan gebruik word sonder om die A/B-prioriteit te verander.
       for(const field of velde.filter(f=>f!=='A'&&f!=='B')){
         if(remaining.length===0)break;
         const g=remaining.find(x=>eligibleInCurrentPhase(x) && canUseVeld(x,field) && canPlace(x,slot,key));
@@ -297,7 +297,7 @@ const playoffForOuderdom=(age)=>{
 
       // O/11 receives Veld A once O/12 pool play has cleared.
 
-      // Fill any still-free velde, while retaining the preferred A/B choices above.
+      // Vul enige oop velde terwyl die A/B-voorkeure hierbo behoue bly.
       for(const field of velde){
         if(remaining.length===0)break;
         if(used[key+'|'+field])continue;
@@ -428,13 +428,13 @@ const playoffForOuderdom=(age)=>{
     '<div class="schedule-action-bar"><button class="primary big" onclick="generateSchedule()">⚡ Skep program</button><button onclick="simulateSchedule()">▶ Simuleer tellings en open die program</button><button onclick="scheduleSaveParams()">Stoor opstelling</button><button id="s_save" class="success big" onclick="saveGeneratedSchedule()">✓ Stoor program</button><button class="danger-outline" onclick="resetTournamentData()">Stel toernooi-data terug</button></div><div id="sched-msg" class="schedule-message"></div><pre id="schedule-log" class="schedule-log" hidden></pre>';
   }
   function poolSummary(){
-    const a=poolCount('O/11'),b=poolCount('O/12');return (a?'O/11: '+a+' pool'+(a>1?'s':''):'O/11: —')+'  ·  '+(b?'O/12: '+b+' pool'+(b>1?'s':''):'O/12: —');
+    const a=poolCount('O/11'),b=poolCount('O/12');return (a?'O/11: '+a+' poel'+(a>1?'e':''):'O/11: —')+'  ·  '+(b?'O/12: '+b+' poel'+(b>1?'e':''):'O/12: —');
   }
   function poolPreviewHtml(){
     buildPoolPlan();
     const rows=[];
     Object.entries(poolPlan).forEach(([age,pools])=>pools.forEach((ts,i)=>rows.push('<div class="pool-card"><div><b>Poel '+poolName(i)+'</b><span>'+esc(age)+'</span></div><strong>'+ts.length+'</strong><small>'+esc(ts.map(t=>t.name||short(t)).join(' · ')||'Geen spanne')+'</small></div>')));
-    return rows.length?rows.join(''):'<div class="empty">Select teams to calculate pools.</div>';
+    return rows.length?rows.join(''):'<div class="empty">Kies spanne om poele te bereken.</div>';
   }
 
   function renderTeams(){
@@ -447,7 +447,7 @@ const playoffForOuderdom=(age)=>{
     const app=get('app');if(!app||!window.__baanbrekerScheduleActive)return;
     const grouped={};preview.forEach(m=>(grouped[m.date]??=[]).push(m));
     const previewHtml=preview.length?Object.entries(grouped).map(([date,ms])=>'<section class="schedule-preview"><div class="preview-head"><div><span>'+esc(dateLabel(date))+'</span><h3>'+ms.length+' wedstryde</h3></div><div class="preview-badge">'+esc(state.fields)+' velde</div></div><div class="schedule-table-wrap"><table class="schedule-table"><thead><tr><th>Wedstryd</th><th>Tyd</th><th>Veld</th><th>Ouderdom</th><th>Poel</th><th>Tuis</th><th>Telling</th><th>Weg</th><th>Skeidsregter</th></tr></thead><tbody>'+ms.map(m=>'<tr><td><b>'+esc(m.matchNumber)+'</b></td><td><b>'+esc(m.time)+'</b></td><td>Veld '+esc(m.field)+'</td><td>'+esc(m.age)+'</td><td><span class="pool-pill">'+esc(m.pool)+'</span></td><td><b>'+esc(m.home?.id?(m.home.name||short(m.home)):(m.placeholderHome||'Nog te bepaal'))+'</b></td><td>—</td><td><b>'+esc(m.away?.id?(m.away.name||short(m.away)):(m.placeholderAway||'Nog te bepaal'))+'</b></td><td>'+esc(refs.find(r=>r.id===m.refId)?.name||'—')+'</td></tr>').join('')+'</tbody></table></div></section>').join(''):'<section class="schedule-preview empty"><h3>Jou programvoorskou sal hier verskyn</h3><p>Kies spanne, stel die poele op en skep die program.</p></section>';
-    app.innerHTML='<aside class="sidebar"><div class="brand"><div class="brand-logo image-logo"><img src="baanbreker-logo.png" alt=""></div><div><b>Laerskool Baanbreker Sewens</b><small>2026 Rugby Sewestoernooi</small></div></div><div class="nav"><button onclick="scheduleBack()">← Dashboard</button><button class="active">Programbouer</button></div><div class="side-foot"><span class="dot '+(online?'live':'demo')+'"></span>'+(online?'Aanlyn databasis':'Voorbeeldmodus')+'</div></aside><section class="page schedule-page"><header><div class="header-brand"><img class="header-logo" src="baanbreker-logo.png" alt=""><div><span class="eyebrow">16–17 Oktober 2026 · Laerskool Baanbreker</span><h1>Programbouer</h1><p>Kies spanne. Die stelsel bereken die poele en stel die wedstrydprogram saam.</p></div></div></header><main><div class="schedule-topbar"><div><h2>1. Kies spanne</h2><p>Kies die spanne wat gaan deelneem. Poele word outomaties bereken.</p></div><div class="top-actions"><button onclick="loadScheduleTeams()">↻ Herlaai</button><button onclick="toggleScheduleTeams(true)">Kies almal</button><button onclick="toggleScheduleTeams(false)">Maak keuse skoon</button></div></div><div id="team-summary" class="schedule-summary"></div><section class="team-picker" id="schedule-teams"><div class="empty">Laai spanne…</div></section>'+controls()+'<div class="schedule-topbar preview-title"><div><h2>4. Programvoorskou</h2><p>Gaan die wedstryde na voordat jy die program stoor.</p></div></div>'+previewHtml+'</main></section>';
+    app.innerHTML='<aside class="sidebar"><div class="brand"><div class="brand-logo image-logo"><img src="baanbreker-logo.png" alt=""></div><div><b>Laerskool Baanbreker Sewens</b><small>2026 Rugby Sewestoernooi</small></div></div><div class="nav"><button onclick="scheduleBack()">← Paneelbord</button><button class="active">Programbouer</button></div><div class="side-foot"><span class="dot '+(online?'live':'demo')+'"></span>'+(online?'Aanlyn databasis':'Voorbeeldmodus')+'</div></aside><section class="page schedule-page"><header><div class="header-brand"><img class="header-logo" src="baanbreker-logo.png" alt=""><div><span class="eyebrow">16–17 Oktober 2026 · Laerskool Baanbreker</span><h1>Programbouer</h1><p>Kies spanne. Die stelsel bereken die poele en stel die wedstrydprogram saam.</p></div></div></header><main><div class="schedule-topbar"><div><h2>1. Kies spanne</h2><p>Kies die spanne wat gaan deelneem. Poele word outomaties bereken.</p></div><div class="top-actions"><button onclick="loadScheduleTeams()">↻ Herlaai</button><button onclick="toggleScheduleTeams(true)">Kies almal</button><button onclick="toggleScheduleTeams(false)">Maak keuse skoon</button></div></div><div id="team-summary" class="schedule-summary"></div><section class="team-picker" id="schedule-teams"><div class="empty">Laai spanne…</div></section>'+controls()+'<div class="schedule-topbar preview-title"><div><h2>4. Programvoorskou</h2><p>Gaan die wedstryde na voordat jy die program stoor.</p></div></div>'+previewHtml+'</main></section>';
     renderTeams();updatePoolUi();
   }
   function updatePoolUi(){
