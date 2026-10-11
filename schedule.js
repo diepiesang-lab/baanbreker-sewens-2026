@@ -129,7 +129,7 @@ const playoffForAge=(age)=>{
       if(pools.length!==2)return;
       const enough=(place)=>pools.every(p=>p.length>=place);
       const seed=(pool,place)=>age+' Pool '+pool+' place '+place;
-      const add=(competition,round,home,away,gameNumber,requiredField)=>games.push({age,pool:'Playoff',round,group:'playoff',playoff:true,competition,gameNumber,requiredField,placeholderHome:home,placeholderAway:away});
+      const add=(competition,round,home,away,gameNumber,requiredField)=>games.push({age,pool:competition+' '+(round.includes('Semi')?'Semi-final':'Final'),round,group:'playoff',playoff:true,competition,gameNumber,requiredField,placeholderHome:home,placeholderAway:away});
 
       if(enough(2)){
         add('Cup','Cup Semi 1',seed('A',1),seed('B',2),1);
