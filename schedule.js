@@ -94,6 +94,33 @@
   function isPresidentSteyn(team){
     return [team?.name,team?.school].some(value=>String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'').includes('presidentsteyn'));
   }
+  function schoolIdentity(value){
+    return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+      .replace(/\b(laerskool|laer|hoerskool|primary|high|school|skool)\b/g,'')
+      .replace(/[^a-z0-9]/g,'');
+  }
+  function schoolRefCode(value){
+    return String(value||'').toUpperCase().replace(/O\s*\/?\s*1[12]/g,'').replace(/[^A-Z]/g,'');
+  }
+  function refereeSchoolIndex(){
+    const teamSchools=new Map(),codes=new Map();
+    teams.forEach(team=>{
+      const school=schoolIdentity(team.school);
+      if(team.id&&school)teamSchools.set(team.id,school);
+      const code=schoolRefCode(team.short);
+      if(code&&school){
+        if(!codes.has(code))codes.set(code,new Set());
+        codes.get(code).add(school);
+      }
+    });
+    const refereeSchools=new Map(refs.map(ref=>{
+      if(ref.team_id&&teamSchools.has(ref.team_id))return [ref.id,teamSchools.get(ref.team_id)];
+      const name=String(ref.name||'').trim().match(/^(.+?)\s+ref\s+\d+$/i);
+      const matches=name?codes.get(schoolRefCode(name[1])):null;
+      return [ref.id,matches?.size===1?[...matches][0]:matches?.size>1?'__AMBIGUOUS__':null];
+    }));
+    return {teamSchools,refereeSchools};
+  }
 
   function generate(simulateOnly=false){
     simulationLog=[];
@@ -158,6 +185,23 @@ const playoffForAge=(age)=>{
     playoffForAge('O/11'); playoffForAge('O/12');
     const sl=slots(),fields=Array.from({length:state.fields},(_,i)=>String.fromCharCode(65+i));
     const presidentSteynAges=new Set(selectedTeams().filter(isPresidentSteyn).map(t=>t.age));
+    const {teamSchools,refereeSchools}=refereeSchoolIndex();
+    const schoolForTeam=team=>team?.id?teamSchools.get(team.id)||schoolIdentity(team.school):'';
+    const possibleSchoolsForPlaceholder=(label,age)=>{
+      const seed=String(label||'').match(/^O\/\d+\s+Pool\s+([A-Z])\s+place\s+\d+$/i);
+      const candidates=seed?teams.filter(t=>t.age===age&&String(t.pool||'').toUpperCase()===seed[1].toUpperCase()):/winner$/i.test(String(label||''))?teams.filter(t=>t.age===age):[];
+      return candidates.map(schoolForTeam).filter(Boolean);
+    };
+    const refAllowedForGame=(ref,game)=>{
+      if(ref.team_id&&(ref.team_id===game.home?.id||ref.team_id===game.away?.id))return false;
+      const refereeSchool=refereeSchools.get(ref.id);
+      if(refereeSchool==='__AMBIGUOUS__')return false;
+      if(!refereeSchool)return true;
+      const opponents=game.playoff
+        ? [...possibleSchoolsForPlaceholder(game.placeholderHome,game.age),...possibleSchoolsForPlaceholder(game.placeholderAway,game.age)]
+        : [schoolForTeam(game.home),schoolForTeam(game.away)];
+      return !opponents.includes(refereeSchool);
+    };
     const isRestrictedMatch=game=>isPresidentSteyn(game.home)||isPresidentSteyn(game.away)||(game.playoff&&presidentSteynAges.has(game.age));
     const presidentSteynStartMinute=slot=>slot.date===state.day1?15*60:0;
     const lateSlots=sl.filter(slot=>slot.minute>=presidentSteynStartMinute(slot));
@@ -185,8 +229,8 @@ const playoffForAge=(age)=>{
 
     function placeGame(game,slot,field){
       const key=slot.date+'|'+slot.time;
-      const ref=state.autoRefs?refs.find(r=>!refUsed[key+'|'+r.id]&&r.team_id!==game.home?.id&&r.team_id!==game.away?.id):null;
-      if(state.autoRefs&&refs.length&&!ref)return false;
+      const ref=state.autoRefs?refs.find(r=>!refUsed[key+'|'+r.id]&&refAllowedForGame(r,game)):null;
+      if(state.autoRefs&&refs.length&&!ref&&!game.playoff)return false;
       const placed={...game,date:slot.date,time:slot.time,minute:slot.minute,field,refId:ref?.id||null};
       used[key+'|'+field]=true;
       if(placed.home?.id){last[placed.home.id]={date:placed.date,minute:placed.minute};teamSlot[placed.home.id]=key}
