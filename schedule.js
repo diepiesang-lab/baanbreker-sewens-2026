@@ -13,7 +13,7 @@
   const defaults={
     day1:'2026-10-16',day1Start:'08:00',day1End:'16:00',
     day2:'2026-10-17',day2Start:'08:00',day2End:'15:00',
-    duration:15,break:5,velde:4,minRest:0,autoRefs:true,replace:false,
+    duration:15,break:5,fields:4,minRest:0,autoRefs:true,replace:false,
     teamsPerPool:4,ages:['O/11','O/12']
   };
   const state=Object.assign({},defaults,(()=>{try{return JSON.parse(localStorage.getItem(STORE)||'{}')}catch{return {}}})());
@@ -127,7 +127,7 @@
     if(!loaded){msg('Laai eers die spanne.','error');return}
     state.duration=Math.max(1,parseInt(val('s_duration')||15));
     state.break=Math.max(0,parseInt(val('s_break')||5));
-    state.velde=Math.max(1,parseInt(val('s_velde')||1));
+    state.fields=Math.max(1,parseInt(val('s_fields')||1));
     state.minRest=Math.max(0,parseInt(val('s_rest')||0));
     state.teamsPerPool=Math.max(2,parseInt(val('s_per_pool')||4));
     state.day1=val('s_day1');state.day1Start=val('s_day1_start');state.day1End=val('s_day1_end');
@@ -183,7 +183,7 @@ const playoffForAge=(age)=>{
       }
     };
     playoffForAge('O/11'); playoffForAge('O/12');
-    const sl=slots(),velde=Array.from({length:state.velde},(_,i)=>String.fromCharCode(65+i));
+    const sl=slots(),fields=Array.from({length:state.fields},(_,i)=>String.fromCharCode(65+i));
     const slotOrder=new Map(sl.map((slot,index)=>[slot.date+'|'+slot.time,index]));
     const presidentSteynAges=new Set(selectedTeams().filter(isPresidentSteyn).map(t=>t.age));
     const {teamSchools,refereeSchools}=refereeSchoolIndex();
@@ -208,14 +208,14 @@ const playoffForAge=(age)=>{
     const lateSlots=sl.filter(slot=>slot.minute>=presidentSteynStartMinute(slot));
     function preferredFields(age){
       const preferred=age==='O/12'?'A':'B';
-      return velde.includes(preferred)?[preferred,...velde.filter(f=>f!==preferred)]:velde.slice();
+      return fields.includes(preferred)?[preferred,...fields.filter(f=>f!==preferred)]:fields.slice();
     }
     if(!sl.length){msg('Geen beskikbare tydgleuwe nie. Kontroleer die dag se tye.','error');return}
     const restrictedGames=games.filter(isRestrictedMatch);
-    if(restrictedGames.length>lateSlots.length*velde.length){
-      msg('<b>President Steyn se skedulebeperking:</b> '+restrictedGames.length+' poel-/uitspeelwedstryde met President Steyn-spanne, of hul moontlike uitspeelroetes, moet op dag een om 15:00 of later begin. Dag twee het geen tydsbeperking nie. Slegs '+(lateSlots.length*velde.length)+' veldgleuwe voldoen op dag een aan die tydsbeperking. Verleng dag een, voeg velde by of verminder wedstryde/wedstrydlengte.','error');return;
+    if(restrictedGames.length>lateSlots.length*fields.length){
+      msg('<b>President Steyn se skedulebeperking:</b> '+restrictedGames.length+' poel-/uitspeelwedstryde met President Steyn-spanne, of hul moontlike uitspeelroetes, moet op dag een om 15:00 of later begin. Dag twee het geen tydsbeperking nie. Slegs '+(lateSlots.length*fields.length)+' veldgleuwe voldoen op dag een aan die tydsbeperking. Verleng dag een, voeg velde by of verminder wedstryde/wedstrydlengte.','error');return;
     }
-    if(games.length>sl.length*velde.length){msg('<b>'+games.length+' wedstryde</b> benodig '+(sl.length*velde.length)+' beskikbare veldgleuwe. Voeg velde/tyd by of verkort wedstrydlengte.','error');return}
+    if(games.length>sl.length*fields.length){msg('<b>'+games.length+' wedstryde</b> benodig '+(sl.length*fields.length)+' beskikbare veldgleuwe. Voeg velde/tyd by of verkort wedstrydlengte.','error');return}
 
     const last={},used={},teamSlot={},teamLastPoolSlot={},refUsed={},refLoad=new Map(refs.map(ref=>[ref.id,0])),result=[];
     const remaining=games.slice();
@@ -275,22 +275,22 @@ const playoffForAge=(age)=>{
       };
       const canUseField=(g,field)=>!g.requiredField||g.requiredField===field;
       const o12=o12PoolPhaseActive?remaining.find(g=>g.age==='O/12' && g.round==='Pool' && canPlace(g,slot,key)):null;
-      if(o12 && velde.includes('A') && !used[key+'|A']){
+      if(o12 && fields.includes('A') && !used[key+'|A']){
         if(placeGame(o12,slot,'A')) remaining.splice(remaining.indexOf(o12),1);
       }
 
       if(o12PoolPhaseActive){
         const o11=remaining.find(g=>g.age==='O/11' && eligibleInCurrentPhase(g) && canUseField(g,'B') && canPlace(g,slot,key));
-        if(o11 && velde.includes('B') && !used[key+'|B']){
+        if(o11 && fields.includes('B') && !used[key+'|B']){
           if(placeGame(o11,slot,'B')) remaining.splice(remaining.indexOf(o11),1);
         }
-      } else if(velde.includes('A') && !used[key+'|A']){
+      } else if(fields.includes('A') && !used[key+'|A']){
         const o11a=remaining.find(g=>g.age==='O/11' && eligibleInCurrentPhase(g) && canUseField(g,'A') && canPlace(g,slot,key));
         if(o11a && placeGame(o11a,slot,'A')) remaining.splice(remaining.indexOf(o11a),1);
       }
 
-      // Other velde can be used without breaking the A/B priority.
-      for(const field of velde.filter(f=>f!=='A'&&f!=='B')){
+      // Other fields can be used without breaking the A/B priority.
+      for(const field of fields.filter(f=>f!=='A'&&f!=='B')){
         if(remaining.length===0)break;
         const g=remaining.find(x=>eligibleInCurrentPhase(x) && canUseField(x,field) && canPlace(x,slot,key));
         if(g && !used[key+'|'+field]){
@@ -300,8 +300,8 @@ const playoffForAge=(age)=>{
 
       // O/11 receives Field A once O/12 pool play has cleared.
 
-      // Fill any still-free velde, while retaining the preferred A/B choices above.
-      for(const field of velde){
+      // Fill any still-free fields, while retaining the preferred A/B choices above.
+      for(const field of fields){
         if(remaining.length===0)break;
         if(used[key+'|'+field])continue;
         const g=remaining.find(x=>eligibleInCurrentPhase(x) && canUseField(x,field) && canPlace(x,slot,key));
@@ -329,7 +329,7 @@ const playoffForAge=(age)=>{
     });
     if(simulateOnly)simulationLog=preview.map((m,i)=>simulationLine(m,i+1));
     renderSchedule();
-    if(simulateOnly){showSimulationLog();msg('<b>Simulasie voltooi:</b> '+preview.length+' wedstryde geskep. Die verslag verskyn hieronder en is in die blaaier se konsole beskikbaar. Geen wedstryde is gestoor nie.','success')}
+    if(simulateOnly){showSimulationLog();msg('<b>Simulasie voltooi:</b> '+preview.length+' wedstryde geskep. Die verslag verskyn hieronder en is ook in die blaaier se konsole beskikbaar. Geen wedstryde is gestoor nie.','success')}
     else msg('<b>'+preview.length+' matches</b> geskep. Gaan die program na voordat jy dit stoor.','success');
   }
 
@@ -427,7 +427,7 @@ const playoffForAge=(age)=>{
     return '<section class="schedule-hero"><div><span class="schedule-kicker">TOERNOOI-INSTELLING</span><h2>Stel jou tweedaagse wedstrydprogram saam</h2><p>Spanne word outomaties oor die nodige poele verdeel. Die program is nie meer beperk tot poele A–D nie.</p></div><div class="schedule-stat"><strong>'+selectedTeams().length+'</strong><span>spanne gekies</span></div></section>'+
     '<section class="schedule-step"><div class="step-no">01</div><div class="step-body"><h3>Poelindeling</h3><p>Stel die gewenste aantal spanne per poel. Die stelsel bereken die aantal poele outomaties.</p><div class="pool-config"><label>Spanne per poel<input id="s_per_pool" type="number" min="2" max="12" value="'+esc(d.teamsPerPool)+'"></label><div class="pool-auto-card"><span>Outomatiese poelberekening</span><b>'+esc(poolSummary())+'</b></div></div><div id="pool-preview" class="pool-preview">'+poolPreviewHtml()+'</div></div></section>'+
     '<section class="schedule-step"><div class="step-no">02</div><div class="step-body"><h3>Tye vir die twee dae</h3><div class="schedule-day-grid"><div class="day-card"><span>DAG 1</span><h4>16 Oktober 2026</h4><div class="twocol"><label>Datum<input id="s_day1" type="date" value="'+esc(d.day1)+'"></label><label>Begin<input id="s_day1_start" type="time" value="'+esc(d.day1Start)+'"></label><label>Eindtyd<input id="s_day1_end" type="time" value="'+esc(d.day1End)+'"></label></div></div><div class="day-card"><span>DAG 2</span><h4>17 Oktober 2026</h4><div class="twocol"><label>Datum<input id="s_day2" type="date" value="'+esc(d.day2)+'"></label><label>Begin<input id="s_day2_start" type="time" value="'+esc(d.day2Start)+'"></label><label>Eindtyd<input id="s_day2_end" type="time" value="'+esc(d.day2End)+'"></label></div></div></div></div></section>'+
-    '<section class="schedule-step"><div class="step-no">03</div><div class="step-body"><h3>Wedstrydreëlings</h3><div class="settings-grid"><label>Wedstrydlengte<input id="s_duration" type="number" min="1" max="60" value="'+esc(d.duration)+'"><small>minute</small></label><label>Pouse tussen wedstryde<input id="s_break" type="number" min="0" max="60" value="'+esc(d.break)+'"><small>minute</small></label><label>Aantal velde<input id="s_velde" type="number" min="1" max="26" value="'+esc(d.velde)+'"><small>wedstryde gelyktydig</small></label><label>Minimum rustyd vir spanne<input id="s_rest" type="number" min="0" max="120" value="'+esc(d.minRest)+'"><small>minute</small></label></div><div class="toggle-row"><label><input id="s_refs" type="checkbox" '+(d.autoRefs?'checked':'')+'> Ken skeidsregters outomaties toe</label><label><input id="s_replace" type="checkbox" '+(d.replace?'checked':'')+'> Vervang bestaande geskeduleerde wedstryde</label></div></div></section>'+
+    '<section class="schedule-step"><div class="step-no">03</div><div class="step-body"><h3>Wedstrydreëlings</h3><div class="settings-grid"><label>Wedstrydlengte<input id="s_duration" type="number" min="1" max="60" value="'+esc(d.duration)+'"><small>minute</small></label><label>Pouse tussen wedstryde<input id="s_break" type="number" min="0" max="60" value="'+esc(d.break)+'"><small>minute</small></label><label>Aantal velde<input id="s_fields" type="number" min="1" max="26" value="'+esc(d.fields)+'"><small>wedstryde gelyktydig</small></label><label>Minimum rustyd vir spanne<input id="s_rest" type="number" min="0" max="120" value="'+esc(d.minRest)+'"><small>minute</small></label></div><div class="toggle-row"><label><input id="s_refs" type="checkbox" '+(d.autoRefs?'checked':'')+'> Ken skeidsregters outomaties toe</label><label><input id="s_replace" type="checkbox" '+(d.replace?'checked':'')+'> Vervang bestaande geskeduleerde wedstryde</label></div></div></section>'+
     '<div class="schedule-action-bar"><button class="primary big" onclick="generateSchedule()">⚡ Skep program</button><button onclick="simulateSchedule()">▶ Simuleer tellings en open die program</button><button onclick="scheduleSaveParams()">Stoor opstelling</button><button id="s_save" class="success big" onclick="saveGeneratedSchedule()">✓ Stoor program</button><button class="danger-outline" onclick="resetTournamentData()">Stel toernooi-data terug</button></div><div id="sched-msg" class="schedule-message"></div><pre id="schedule-log" class="schedule-log" hidden></pre>';
   }
   function poolSummary(){
@@ -449,7 +449,7 @@ const playoffForAge=(age)=>{
   function renderSchedule(){
     const app=get('app');if(!app||!window.__baanbrekerScheduleActive)return;
     const grouped={};preview.forEach(m=>(grouped[m.date]??=[]).push(m));
-    const previewHtml=preview.length?Object.entries(grouped).map(([date,ms])=>'<section class="schedule-preview"><div class="preview-head"><div><span>'+esc(dateLabel(date))+'</span><h3>'+ms.length+' matches</h3></div><div class="preview-badge">'+esc(state.velde)+' velde</div></div><div class="schedule-table-wrap"><table class="schedule-table"><thead><tr><th>Wedstryd</th><th>Tyd</th><th>Veld</th><th>Ouderdom</th><th>Poel</th><th>Tuis</th><th>Telling</th><th>Weg</th><th>Skeidsregter</th></tr></thead><tbody>'+ms.map(m=>'<tr><td><b>'+esc(m.matchNumber)+'</b></td><td><b>'+esc(m.time)+'</b></td><td>Field '+esc(m.field)+'</td><td>'+esc(m.age)+'</td><td><span class="pool-pill">'+esc(m.pool)+'</span></td><td><b>'+esc(m.home?.id?(m.home.name||short(m.home)):(m.placeholderHome||'Nog te bepaal'))+'</b></td><td>—</td><td><b>'+esc(m.away?.id?(m.away.name||short(m.away)):(m.placeholderAway||'Nog te bepaal'))+'</b></td><td>'+esc(refs.find(r=>r.id===m.refId)?.name||'—')+'</td></tr>').join('')+'</tbody></table></div></section>').join(''):'<section class="schedule-preview empty"><h3>Jou programvoorskou sal hier verskyn</h3><p>Kies spanne, stel die poele op en skep die program.</p></section>';
+    const previewHtml=preview.length?Object.entries(grouped).map(([date,ms])=>'<section class="schedule-preview"><div class="preview-head"><div><span>'+esc(dateLabel(date))+'</span><h3>'+ms.length+' matches</h3></div><div class="preview-badge">'+esc(state.fields)+' fields</div></div><div class="schedule-table-wrap"><table class="schedule-table"><thead><tr><th>Wedstryd</th><th>Tyd</th><th>Veld</th><th>Ouderdom</th><th>Poel</th><th>Tuis</th><th>Telling</th><th>Weg</th><th>Skeidsregter</th></tr></thead><tbody>'+ms.map(m=>'<tr><td><b>'+esc(m.matchNumber)+'</b></td><td><b>'+esc(m.time)+'</b></td><td>Field '+esc(m.field)+'</td><td>'+esc(m.age)+'</td><td><span class="pool-pill">'+esc(m.pool)+'</span></td><td><b>'+esc(m.home?.id?(m.home.name||short(m.home)):(m.placeholderHome||'Nog te bepaal'))+'</b></td><td>—</td><td><b>'+esc(m.away?.id?(m.away.name||short(m.away)):(m.placeholderAway||'Nog te bepaal'))+'</b></td><td>'+esc(refs.find(r=>r.id===m.refId)?.name||'—')+'</td></tr>').join('')+'</tbody></table></div></section>').join(''):'<section class="schedule-preview empty"><h3>Jou programvoorskou sal hier verskyn</h3><p>Kies spanne, stel die poele op en skep die program.</p></section>';
     app.innerHTML='<aside class="sidebar"><div class="brand"><div class="brand-logo image-logo"><img src="baanbreker-logo.png" alt=""></div><div><b>Laerskool Baanbreker Sewens</b><small>2026 Rugby Sewens Toernooi</small></div></div><div class="nav"><button onclick="scheduleBack()">← Dashboard</button><button class="active">Programbouer</button></div><div class="side-foot"><span class="dot '+(online?'live':'demo')+'"></span>'+(online?'Aanlyn databasis':'Voorbeeldmodus')+'</div></aside><section class="page schedule-page"><header><div class="header-brand"><img class="header-logo" src="baanbreker-logo.png" alt=""><div><span class="eyebrow">16–17 Oktober 2026 · Laerskool Baanbreker</span><h1>Programbouer</h1><p>Kies spanne. Die stelsel bereken die poele en stel die wedstrydprogram saam.</p></div></div></header><main><div class="schedule-topbar"><div><h2>1. Kies spanne</h2><p>Kies die spanne wat gaan deelneem. Poele word outomaties bereken.</p></div><div class="top-actions"><button onclick="loadScheduleTeams()">↻ Herlaai</button><button onclick="toggleScheduleTeams(true)">Kies almal</button><button onclick="toggleScheduleTeams(false)">Maak keuse skoon</button></div></div><div id="team-summary" class="schedule-summary"></div><section class="team-picker" id="schedule-teams"><div class="empty">Laai spanne…</div></section>'+controls()+'<div class="schedule-topbar preview-title"><div><h2>4. Programvoorskou</h2><p>Gaan die geskepte wedstryde na voordat jy die program stoor.</p></div></div>'+previewHtml+'</main></section>';
     renderTeams();updatePoolUi();
   }
