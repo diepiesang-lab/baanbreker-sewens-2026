@@ -121,12 +121,42 @@
         pools.forEach(p=>{if(p.fixtures[i])games.push(p.fixtures[i])});
       }
     });
-const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 || pools.some(p=>p.length<(age==='O/11'?6:5))) return; const paths=[['Bowl',5],['Plate',3],['Cup',1]]; paths.forEach(([comp,pos])=>{ games.push({age,pool:'Playoff',round:comp+' Semi 1',group:'playoff',playoff:true,competition:comp,placeholderHome:age+' Pool A '+pos+'th',placeholderAway:age+' Pool B '+(pos+1)+'th'}); games.push({age,pool:'Playoff',round:comp+' Semi 2',group:'playoff',playoff:true,competition:comp,placeholderHome:age+' Pool B '+pos+'th',placeholderAway:age+' Pool A '+(pos+1)+'th'}); games.push({age,pool:'Playoff',round:comp+' Final',group:'playoff',playoff:true,competition:comp,placeholderHome:comp+' Semi 1 winner',placeholderAway:comp+' Semi 2 winner'}); }); };
+const playoffForAge=(age)=>{
+      const pools=poolPlan[age]||[];
+      if(pools.length!==2)return;
+      const enough=(place)=>pools.every(p=>p.length>=place);
+      const seed=(pool,place)=>age+' Pool '+pool+' place '+place;
+      const add=(competition,round,home,away,gameNumber,requiredField)=>games.push({age,pool:'Playoff',round,group:'playoff',playoff:true,competition,gameNumber,requiredField,placeholderHome:home,placeholderAway:away});
+
+      if(enough(2)){
+        add('Cup','Cup Semi 1',seed('A',1),seed('B',2),1);
+        add('Cup','Cup Semi 2',seed('A',2),seed('B',1),2);
+        add('Cup','Cup Final','Cup Game 1 winner','Cup Game 2 winner',undefined,'A');
+      }
+
+      if(age==='O/11'){
+        if(enough(4)){
+          add('Shield','Shield Semi 1',seed('A',3),seed('B',4),3);
+          add('Shield','Shield Semi 2',seed('A',4),seed('B',3),4);
+          add('Shield','Shield Final','Shield Game 3 winner','Shield Game 4 winner',undefined,'A');
+        }
+        if(enough(6)){
+          add('Plate','Plate Semi 1',seed('A',5),seed('B',6),5);
+          add('Plate','Plate Semi 2',seed('A',6),seed('B',5),6);
+          add('Plate','Plate Final','Plate Game 5 winner','Plate Game 6 winner');
+        }
+        if(enough(7))add('Bowl','Bowl Final',seed('A',7),seed('B',7));
+      }else{
+        if(enough(3))add('Shield','Shield Final',seed('A',3),seed('B',3),undefined,'A');
+        if(enough(4))add('Plate','Plate Final',seed('A',4),seed('B',4));
+        if(enough(5))add('Bowl','Bowl Final',seed('A',5),seed('B',5));
+      }
+    };
     playoffForAge('O/11'); playoffForAge('O/12');
     const sl=slots(),fields=Array.from({length:state.fields},(_,i)=>String.fromCharCode(65+i));
     const presidentSteynAges=new Set(selectedTeams().filter(isPresidentSteyn).map(t=>t.age));
     const isRestrictedMatch=game=>isPresidentSteyn(game.home)||isPresidentSteyn(game.away)||(game.playoff&&presidentSteynAges.has(game.age));
-    const presidentSteynStartMinute=slot=>slot.date===state.day1?15*60:0;
+    const presidentSteynStartMinute=slot=>slot.date===state.day1?15*60:16*60;
     const lateSlots=sl.filter(slot=>slot.minute>=presidentSteynStartMinute(slot));
     function preferredFields(age){
       const preferred=age==='O/12'?'A':'B';
@@ -135,27 +165,16 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
     if(!sl.length){msg('No usable time slots. Check your day times.','error');return}
     const restrictedGames=games.filter(isRestrictedMatch);
     if(restrictedGames.length>lateSlots.length*fields.length){
-      msg('<b>President Steyn scheduling limit:</b> '+restrictedGames.length+' pool/playoff matches involving President Steyn teams, or their possible age-group playoff paths, require a start at or after 15:00 on day one. Only '+(lateSlots.length*fields.length)+' field slots meet that time limit across the selected tournament days. Extend day one, add fields, or reduce the fixtures/duration.','error');return;
+      msg('<b>President Steyn scheduling limit:</b> '+restrictedGames.length+' pool/playoff matches involving President Steyn teams, or their possible age-group playoff paths, require a start at or after 15:00 on day one and 16:00 on day two. Only '+(lateSlots.length*fields.length)+' field slots meet those time limits across the selected tournament days. Extend the day times, add fields, or reduce the fixtures/duration.','error');return;
     }
     if(games.length>sl.length*fields.length){msg('<b>'+games.length+' matches</b> need '+(sl.length*fields.length)+' available field slots. Add fields/time or reduce duration.','error');return}
 
     const last={},used={},teamSlot={},refUsed={},result=[];
     const remaining=games.slice();
-    const cupFinalCount=games.filter(g=>g.playoff && g.competition==='Cup' && g.round==='Cup Final').length;
-    const finalSlotCapacity=state.autoRefs&&refs.length?Math.min(fields.length,refs.length):fields.length;
-    const cupFinalSlotCount=cupFinalCount?Math.ceil(cupFinalCount/finalSlotCapacity):0;
-    const cupFinalSlotKeys=new Set(cupFinalSlotCount?sl.slice(-cupFinalSlotCount).map(slot=>slot.date+'|'+slot.time):[]);
-
     function canPlace(game,slot,key){
       if(isRestrictedMatch(game)&&slot.minute<presidentSteynStartMinute(slot))return false;
       if(game.home?.id && teamSlot[game.home.id]===key)return false;
       if(game.away?.id && teamSlot[game.away.id]===key)return false;
-      const backToBack=teamId=>{
-        const previous=last[teamId];
-        return !game.playoff&&!previous?.playoff&&previous?.date===slot.date&&slot.minute-previous.minute<=state.duration+state.break;
-      };
-      if(game.home?.id&&backToBack(game.home.id))return false;
-      if(game.away?.id&&backToBack(game.away.id))return false;
       if(game.home?.id && last[game.home.id]&&last[game.home.id].date===slot.date&&slot.minute-last[game.home.id].minute<state.duration+state.minRest)return false;
       if(game.away?.id && last[game.away.id]&&last[game.away.id].date===slot.date&&slot.minute-last[game.away.id].minute<state.duration+state.minRest)return false;
       return true;
@@ -167,8 +186,8 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
       if(state.autoRefs&&refs.length&&!ref)return false;
       const placed={...game,date:slot.date,time:slot.time,minute:slot.minute,field,refId:ref?.id||null};
       used[key+'|'+field]=true;
-      if(placed.home?.id){last[placed.home.id]={date:placed.date,minute:placed.minute,playoff:!!placed.playoff};teamSlot[placed.home.id]=key}
-      if(placed.away?.id){last[placed.away.id]={date:placed.date,minute:placed.minute,playoff:!!placed.playoff};teamSlot[placed.away.id]=key}
+      if(placed.home?.id){last[placed.home.id]={date:placed.date,minute:placed.minute};teamSlot[placed.home.id]=key}
+      if(placed.away?.id){last[placed.away.id]={date:placed.date,minute:placed.minute};teamSlot[placed.away.id]=key}
       if(placed.refId)refUsed[key+'|'+placed.refId]=true;
       result.push(placed);
       return true;
@@ -180,39 +199,36 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
     // After all O/12 matches have been scheduled, O/11 may use A as well.
     for(const slot of sl){
       const key=slot.date+'|'+slot.time;
-      const cupFinalSlot=cupFinalSlotKeys.has(key);
       const poolStageActive=remaining.some(g=>g.round==='Pool');
       const o12PoolPhaseActive=remaining.some(g=>g.age==='O/12' && g.round==='Pool');
-      const semisStillWaiting=remaining.some(g=>g.playoff && g.round.includes('Semi'));
-      const nextFinalCompetition=['Bowl','Plate','Cup'].find(comp=>remaining.some(g=>g.playoff && g.competition===comp && g.round===comp+' Final'));
-      const bowlOrPlateFinalsWaiting=remaining.some(g=>g.playoff && ['Bowl','Plate'].includes(g.competition) && g.round.endsWith('Final'));
+      const nextSemifinalCompetition=['Bowl','Plate','Shield','Cup'].find(comp=>remaining.some(g=>g.playoff && g.competition===comp && g.round.includes('Semi')));
+      const nextFinalCompetition=['Bowl','Plate','Shield','Cup'].find(comp=>remaining.some(g=>g.playoff && g.competition===comp && g.round.endsWith('Final')));
       const eligibleInCurrentPhase=g=>{
-        if(cupFinalSlot) return !poolStageActive && !semisStillWaiting && !bowlOrPlateFinalsWaiting && g.playoff && g.competition==='Cup' && g.round==='Cup Final';
         if(poolStageActive) return g.round==='Pool';
-        if(semisStillWaiting) return g.playoff && g.round.includes('Semi');
-        if(g.playoff && g.round.includes('Semi')) return false;
-        if(g.playoff && g.round.endsWith('Final')) return g.competition===nextFinalCompetition && g.competition!=='Cup';
+        if(nextSemifinalCompetition)return g.playoff && g.competition===nextSemifinalCompetition && g.round.includes('Semi');
+        if(nextFinalCompetition)return g.playoff && g.competition===nextFinalCompetition && g.round.endsWith('Final');
         return false;
       };
+      const canUseField=(g,field)=>!g.requiredField||g.requiredField===field;
       const o12=o12PoolPhaseActive?remaining.find(g=>g.age==='O/12' && g.round==='Pool' && canPlace(g,slot,key)):null;
       if(o12 && fields.includes('A') && !used[key+'|A']){
         if(placeGame(o12,slot,'A')) remaining.splice(remaining.indexOf(o12),1);
       }
 
       if(o12PoolPhaseActive){
-        const o11=remaining.find(g=>g.age==='O/11' && eligibleInCurrentPhase(g) && canPlace(g,slot,key));
+        const o11=remaining.find(g=>g.age==='O/11' && eligibleInCurrentPhase(g) && canUseField(g,'B') && canPlace(g,slot,key));
         if(o11 && fields.includes('B') && !used[key+'|B']){
           if(placeGame(o11,slot,'B')) remaining.splice(remaining.indexOf(o11),1);
         }
       } else if(fields.includes('A') && !used[key+'|A']){
-        const o11a=remaining.find(g=>g.age==='O/11' && eligibleInCurrentPhase(g) && canPlace(g,slot,key));
+        const o11a=remaining.find(g=>g.age==='O/11' && eligibleInCurrentPhase(g) && canUseField(g,'A') && canPlace(g,slot,key));
         if(o11a && placeGame(o11a,slot,'A')) remaining.splice(remaining.indexOf(o11a),1);
       }
 
       // Other fields can be used without breaking the A/B priority.
       for(const field of fields.filter(f=>f!=='A'&&f!=='B')){
         if(remaining.length===0)break;
-        const g=remaining.find(x=>eligibleInCurrentPhase(x) && canPlace(x,slot,key));
+        const g=remaining.find(x=>eligibleInCurrentPhase(x) && canUseField(x,field) && canPlace(x,slot,key));
         if(g && !used[key+'|'+field]){
           if(placeGame(g,slot,field))remaining.splice(remaining.indexOf(g),1);
         }
@@ -224,7 +240,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
       for(const field of fields){
         if(remaining.length===0)break;
         if(used[key+'|'+field])continue;
-        const g=remaining.find(x=>eligibleInCurrentPhase(x) && canPlace(x,slot,key));
+        const g=remaining.find(x=>eligibleInCurrentPhase(x) && canUseField(x,field) && canPlace(x,slot,key));
         if(g){
           if(placeGame(g,slot,field))remaining.splice(remaining.indexOf(g),1);
         }
@@ -236,7 +252,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
       preview=[];renderSchedule();
       if(simulateOnly)showSimulationLog();
       if(remaining.some(isRestrictedMatch)){
-        msg('Could not fit every President Steyn pool/playoff fixture into available starts at or after 15:00 on day one. Extend day one, add fields, or reduce duration/rest time. '+remaining.length+' matches remain.','error');
+        msg('Could not fit every President Steyn pool/playoff fixture into available starts at or after 15:00 on day one and 16:00 on day two. Extend the day times, add fields, or reduce duration/rest time. '+remaining.length+' matches remain.','error');
         return;
       }
       msg('Could not place every match. Reduce rest time/duration or add fields. '+remaining.length+' matches remain.','error');
@@ -326,7 +342,7 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
     if(!confirm('CLEAR SCORES ONLY? This will keep teams, referees and the full schedule, but reset all match scores and live scoring state.'))return;
     try{
       msg('Resetting tournament data…');
-      const r=await sb.from('matches').update({home_score:0,away_score:0,status:'scheduled',clock_running:false,clock_seconds:0,clock_started_at:null,current_half:1}).neq('status','__never__');
+      const r=await sb.from('matches').update({home_score:0,away_score:0,status:'scheduled',clock_running:false,clock_seconds:420,clock_started_at:null,current_half:1}).neq('status','__never__');
       if(r.error)throw r.error;
       const ev=await sb.from('match_events').delete().not('id','is',null);
       if(ev.error && !/relation .* does not exist|table .* does not exist/i.test(ev.error.message))throw ev.error;
@@ -393,3 +409,4 @@ const playoffForAge=(age)=>{ const pools=poolPlan[age]||[]; if(pools.length!==2 
 .schedule-page main{max-width:1500px}.schedule-topbar{display:flex;justify-content:space-between;align-items:end;gap:20px;margin:4px 0 14px}.schedule-topbar h2{margin:0 0 5px;font-size:24px}.schedule-topbar p{margin:0;color:var(--muted)}.top-actions{display:flex;gap:8px;flex-wrap:wrap}.schedule-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:28px;border-radius:22px;background:linear-gradient(135deg,#143d2b,#1d5d40);color:#fff;margin:14px 0 18px;box-shadow:0 16px 35px rgba(0,0,0,.12)}.schedule-hero h2{margin:5px 0;font-size:28px}.schedule-hero p{margin:0;opacity:.8}.schedule-kicker{font-size:11px;letter-spacing:1.5px;font-weight:900;opacity:.7}.schedule-stat{min-width:130px;text-align:center;padding:16px 20px;border:1px solid rgba(255,255,255,.2);border-radius:16px;background:rgba(255,255,255,.08)}.schedule-stat strong{display:block;font-size:32px}.schedule-stat span{font-size:11px;opacity:.75}.schedule-step{display:grid;grid-template-columns:52px 1fr;gap:18px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:22px;margin:14px 0;box-shadow:0 5px 20px rgba(0,0,0,.04)}.step-no{width:42px;height:42px;border-radius:13px;background:#edf5ef;color:var(--primary);display:grid;place-items:center;font-weight:900}.step-body h3{margin:0 0 4px;font-size:19px}.step-body>p{margin:0 0 16px;color:var(--muted)}.pool-config{display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:stretch}.pool-auto-card{display:flex;flex-direction:column;justify-content:center;padding:12px 16px;border-radius:14px;background:#f4f7f5;border:1px solid var(--line)}.pool-auto-card span{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}.pool-auto-card b{margin-top:4px}.pool-preview{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-top:14px}.pool-card{padding:13px;border:1px solid var(--line);border-radius:15px;background:#fafcfb}.pool-card>div{display:flex;justify-content:space-between}.pool-card span{font-size:10px;color:var(--muted)}.pool-card strong{display:block;font-size:22px;margin:6px 0}.pool-card small{color:var(--muted);line-height:1.5}.schedule-day-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.day-card{padding:17px;border:1px solid var(--line);border-radius:16px;background:#fafcfb}.day-card>span{font-size:10px;font-weight:900;letter-spacing:1px;color:var(--primary)}.day-card h4{margin:4px 0 15px;font-size:17px}.twocol{display:grid;grid-template-columns:1fr 1fr;gap:10px}.settings-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.settings-grid label{position:relative}.settings-grid small{display:block;color:var(--muted);font-size:10px;margin-top:3px}.toggle-row{display:flex;gap:25px;flex-wrap:wrap;margin-top:18px}.schedule-action-bar{display:flex;gap:9px;flex-wrap:wrap;justify-content:flex-end;margin:18px 0}.schedule-action-bar .big{padding:13px 18px}.danger-outline{border-color:#c0392b!important;color:#b3261e!important}.schedule-message{padding:0 4px;font-weight:700}.schedule-message.success{color:#176a39}.schedule-message.error{color:#b3261e}.schedule-log{white-space:pre-wrap;max-height:360px;overflow:auto;padding:16px;background:#101b16;color:#e8f5ec;border-radius:14px;font:12px/1.6 ui-monospace,monospace}.team-picker{background:#fff;border:1px solid var(--line);border-radius:20px;padding:20px}.team-section{margin-bottom:24px}.team-section:last-child{margin-bottom:0}.team-section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.team-section-head span{font-size:10px;color:var(--primary);font-weight:900;letter-spacing:1px}.team-section-head h3{margin:2px 0 0}.schedule-team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(235px,1fr));gap:10px}.schedule-team-option{display:grid;grid-template-columns:20px 48px 1fr;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:15px;cursor:pointer;transition:.15s;background:#fff}.schedule-team-option:hover{border-color:var(--primary);transform:translateY(-1px)}.schedule-team-option input{accent-color:var(--primary)}.schedule-team-option>span{width:48px;height:48px;border-radius:12px;background:#f2f4f3;display:grid;place-items:center;overflow:hidden}.schedule-team-option img{width:100%;height:100%;object-fit:contain}.schedule-team-option div{min-width:0}.schedule-team-option b{display:block;font-size:15px}.schedule-team-option small{display:block;color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.schedule-summary{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}.schedule-chip{padding:7px 11px;border-radius:99px;background:#edf5ef;color:var(--primary);font-weight:800;font-size:11px}.schedule-preview{background:#fff;border:1px solid var(--line);border-radius:20px;margin:14px 0;overflow:hidden}.preview-head{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-bottom:1px solid var(--line)}.preview-head span{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}.preview-head h3{margin:3px 0 0}.preview-badge{padding:7px 10px;border-radius:99px;background:#f1f4f2;font-size:11px;font-weight:800}.schedule-table-wrap{overflow:auto}.schedule-table{width:100%;border-collapse:collapse;font-size:12px}.schedule-table th,.schedule-table td{padding:11px 13px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}.schedule-table th{font-size:9px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)}.pool-pill{padding:4px 8px;border-radius:99px;background:#edf5ef;font-weight:900}.empty{padding:25px;text-align:center;color:var(--muted)}.preview-title{margin-top:28px}@media(max-width:900px){.settings-grid{grid-template-columns:1fr 1fr}.pool-config,.schedule-day-grid{grid-template-columns:1fr}}@media(max-width:600px){.schedule-hero,.schedule-topbar{align-items:flex-start;flex-direction:column}.settings-grid{grid-template-columns:1fr}.schedule-step{grid-template-columns:1fr}.step-no{width:38px;height:38px}.twocol{grid-template-columns:1fr}.schedule-action-bar{justify-content:flex-start}.schedule-team-grid{grid-template-columns:1fr}}`;
   document.head.appendChild(css);
 })();
+
