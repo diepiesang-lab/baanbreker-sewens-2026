@@ -216,7 +216,7 @@ const playoffForAge=(age)=>{
     }
     if(games.length>sl.length*fields.length){msg('<b>'+games.length+' matches</b> need '+(sl.length*fields.length)+' available field slots. Add fields/time or reduce duration.','error');return}
 
-    const last={},used={},teamSlot={},refUsed={},result=[];
+    const last={},used={},teamSlot={},refUsed={},refLoad=new Map(refs.map(ref=>[ref.id,0])),result=[];
     const remaining=games.slice();
     function canPlace(game,slot,key){
       if(isRestrictedMatch(game)&&slot.minute<presidentSteynStartMinute(slot))return false;
@@ -229,13 +229,17 @@ const playoffForAge=(age)=>{
 
     function placeGame(game,slot,field){
       const key=slot.date+'|'+slot.time;
-      const ref=state.autoRefs?refs.find(r=>!refUsed[key+'|'+r.id]&&refAllowedForGame(r,game)):null;
+      const eligibleRefs=state.autoRefs&&!game.playoff
+        ? refs.filter(r=>!refUsed[key+'|'+r.id]&&refAllowedForGame(r,game))
+        : [];
+      eligibleRefs.sort((a,b)=>(refLoad.get(a.id)||0)-(refLoad.get(b.id)||0)||String(a.name||'').localeCompare(String(b.name||'')));
+      const ref=eligibleRefs[0]||null;
       if(state.autoRefs&&refs.length&&!ref&&!game.playoff)return false;
       const placed={...game,date:slot.date,time:slot.time,minute:slot.minute,field,refId:ref?.id||null};
       used[key+'|'+field]=true;
       if(placed.home?.id){last[placed.home.id]={date:placed.date,minute:placed.minute};teamSlot[placed.home.id]=key}
       if(placed.away?.id){last[placed.away.id]={date:placed.date,minute:placed.minute};teamSlot[placed.away.id]=key}
-      if(placed.refId)refUsed[key+'|'+placed.refId]=true;
+      if(placed.refId){refUsed[key+'|'+placed.refId]=true;refLoad.set(placed.refId,(refLoad.get(placed.refId)||0)+1)}
       result.push(placed);
       return true;
     }
