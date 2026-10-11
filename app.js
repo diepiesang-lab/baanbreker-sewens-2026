@@ -219,7 +219,62 @@ function teamsView(){if(!admin)return `<div class="panel empty"><h2>Spanne</h2><
 function openTeam(id){if(!admin)return;const t=id?data.teams.find(x=>x.id===id):{id:'',name:'',school:'',age:age,pool:'A',short:'',logoUrl:''};if(!t)return;const d=modal(`<h2>${id?'Wysig span':'Nuwe span'}</h2><label>Spannaam<input id="t_name" value="${esc(t.name)}"></label><div class="twocol"><label>Ouderdom<select id="t_age"><option>O/11</option><option>O/12</option></select></label><label>Poel<select id="t_pool"><option>A</option><option>B</option><option>C</option><option>D</option></select></label></div><div class="twocol"><label>Kort naam<input id="t_short" value="${esc(t.short||'')}"></label><label>Skool<input id="t_school" value="${esc(t.school||'')}"></label></div><label>Span logo<input id="t_logo" type="file" accept="image/png,image/jpeg,image/webp"></label><div class="modal-actions">${id?`<button class="danger" onclick="deleteTeam('${id}',this)">Verwyder</button>`:''}<span></span><button onclick="this.closest('.modal').remove()">Kanselleer</button><button class="primary" onclick="saveTeam('${id}',this)">Stoor</button></div>`);document.getElementById('t_age').value=t.age||'O/11';document.getElementById('t_pool').value=t.pool||'A';return d}
 async function saveTeam(id,btn){if(!admin)return;const name=val('t_name').trim();if(!name)return alert('Spannaam is nodig.');const old=data.teams.find(x=>x.id===id);const tid=id&&isUuid(id)?id:uuid();const payload={id:tid,name,school:val('t_school').trim(),age:val('t_age'),pool:val('t_pool'),short:val('t_short').trim(),active:true};try{btn.disabled=true;if(online){const f=document.getElementById('t_logo')?.files?.[0];if(f){const ext=(f.name.split('.').pop()||'png').toLowerCase();const path=`teams/${tid}.${ext}`;const up=await sb.storage.from('team-logos').upload(path,f,{upsert:true,contentType:f.type||'image/png'});if(up.error)throw up.error;payload.logo_url=sb.storage.from('team-logos').getPublicUrl(path).data.publicUrl;}else if(old?.logoUrl)payload.logo_url=old.logoUrl;const q=await sb.from('teams').upsert(payload).select().single();if(q.error)throw q.error;await refresh()}else{const local={id:tid,name,school:payload.school,age:payload.age,pool:payload.pool,short:payload.short,logoUrl:old?.logoUrl||''};const i=data.teams.findIndex(x=>x.id===tid);i>=0?data.teams[i]=local:data.teams.push(local);localSave()}btn.closest('.modal').remove();render()}catch(e){btn.disabled=false;alert('Span kon nie gestoor word nie: '+(e?.message||e))}}
 async function deleteTeam(id,btn){if(!admin||!confirm('Verwyder hierdie span?'))return;try{if(online){const q=await sb.from('teams').delete().eq('id',id);if(q.error)throw q.error;await refresh()}else{data.teams=data.teams.filter(t=>t.id!==id);localSave()}btn.closest('.modal')?.remove();render()}catch(e){alert(e.message)}}
-function refsView(){if(!admin)return `<div class="panel empty"><h2>Skeidsregters</h2><p>Admin toegang benodig.</p></div>`;return `<div class="title-row"><div><h2>Skeidsregters</h2><p>Koppel elke skeidsregter aan hul eie span; hulle kan nie dié span se wedstryde blaas nie.</p></div><button class="primary" onclick="openRef()">+ Voeg skeidsregter</button></div><div class="panel">${data.refs.map(r=>`<div class="ref-row"><div><b>${esc(r.name)}</b><small>${esc(r.level||'')} · ${esc(data.teams.find(t=>t.id===r.teamId)?.name||'Geen span gekoppel')}</small></div><span>${r.active!==false?'Aktief':'Onaktief'}</span><button onclick="openRef('${r.id}')">Wysig</button></div>`).join('')||empty('Geen skeidsregters nie.')}</div>`}
+function schoolRefGroups(){
+  const groups=new Map();
+  data.teams.forEach(team=>{
+    const school=String(team.school||'').trim();
+    if(!school)return;
+    const key=school.normalize('NFKC').toLowerCase().replace(/[^a-z0-9]/g,'');
+    if(!groups.has(key))groups.set(key,{school,teams:[]});
+    groups.get(key).teams.push(team);
+  });
+  return [...groups.values()].map(group=>{
+    const votes=new Map();
+    group.teams.forEach(team=>{
+      const code=String(team.short||'').toUpperCase().replace(/O\\s*\\/?\\s*1[12]/g,'').replace(/(?:11|12)$/,'').replace(/[^A-Z]/g,'');
+      if(code)votes.set(code,(votes.get(code)||0)+1);
+    });
+    let short=[...votes.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
+    if(!short){
+      const cleaned=group.school.replace(/\\b(laerskool|laer|ho[eë]rskool|primary school|primary|high school|school)\\b/gi,' ').trim();
+      const words=cleaned.split(/\\s+/).filter(Boolean);
+      short=/baanbreker/i.test(group.school)?'BB':words.length>1?words.map(word=>word[0]).join(''):((words[0]||group.school).slice(0,2));
+      short=short.toUpperCase().replace(/[^A-Z]/g,'');
+    }
+    return {...group,short};
+  });
+}
+async function addSchoolReferees(btn){
+  if(!admin)return alert('Admin-toegang benodig.');
+  const groups=schoolRefGroups();
+  if(!groups.length)return alert('Geen skoolname is op die spanrekords ingevul nie.');
+  const byShort=new Map();
+  groups.forEach(group=>byShort.set(group.short,(byShort.get(group.short)||[]).concat(group.school)));
+  const collisions=[...byShort.entries()].filter(([,schools])=>schools.length>1);
+  if(collisions.length)return alert('Skoolkortname moet uniek wees voordat skeidsregters geskep kan word: '+collisions.map(([code,schools])=>code+' ('+schools.join(', ')+')').join('; '));
+  const existing=new Set(data.refs.map(ref=>ref.name.trim().toLowerCase()));
+  const rows=[];
+  groups.forEach(group=>[1,2].forEach(number=>{
+    const name=group.short+' ref '+number;
+    if(!existing.has(name.toLowerCase()))rows.push({id:uuid(),name,level:'Skoolskeidsregter',active:true});
+  }));
+  if(!rows.length)return alert('Elke skool het reeds twee skeidsregters.');
+  if(btn)btn.disabled=true;
+  try{
+    if(online){
+      const result=await sb.from('referees').insert(rows.map(({id,name,level,active})=>({id,name,level,active})));
+      if(result.error)throw result.error;
+      await refresh();
+    }else{
+      data.refs.push(...rows.map(ref=>({...ref,teamId:null})));
+      localSave();
+    }
+    alert(rows.length+' skeidsregter(s) bygevoeg.');
+    render();
+  }catch(e){alert('Skeidsregters kon nie bygevoeg word nie: '+(e?.message||e))}
+  finally{if(btn)btn.disabled=false}
+}
+function refsView(){if(!admin)return `<div class="panel empty"><h2>Skeidsregters</h2><p>Admin toegang benodig.</p></div>`;return `<div class="title-row"><div><h2>Skeidsregters</h2><p>Skep twee skeidsregters per skool, benoem met die skool se kortnaam.</p></div><div class="top-actions"><button onclick="addSchoolReferees(this)">+ Voeg 2 per skool by</button><button class="primary" onclick="openRef()">+ Voeg skeidsregter</button></div></div><div class="panel">${data.refs.map(r=>`<div class="ref-row"><div><b>${esc(r.name)}</b><small>${esc(r.level||'')}${data.teams.find(t=>t.id===r.teamId)?' · '+esc(data.teams.find(t=>t.id===r.teamId).name):''}</small></div><span>${r.active!==false?'Aktief':'Onaktief'}</span><button onclick="openRef('${r.id}')">Wysig</button></div>`).join('')||empty('Geen skeidsregters nie.')}</div>`}
 function openRef(id){if(!admin)return;const r=id?data.refs.find(x=>x.id===id):{id:'',name:'',level:'',teamId:null,active:true};modal(`<h2>${id?'Wysig skeidsregter':'Nuwe skeidsregter'}</h2><label>Naam<input id="r_name" value="${esc(r.name)}"></label><label>Kwalifikasie / vlak<input id="r_level" value="${esc(r.level||'')}"></label><label>Eie span<select id="r_team"><option value="">Geen span gekoppel</option>${data.teams.slice().sort((a,b)=>String(a.age).localeCompare(String(b.age))||a.name.localeCompare(b.name)).map(t=>`<option value="${esc(t.id)}">${esc(t.age)} · ${esc(t.name)}</option>`).join('')}</select></label><label><input id="r_active" type="checkbox" ${r.active!==false?'checked':''}> Aktief</label><div class="modal-actions">${id?`<button class="danger" onclick="deleteRef('${id}',this)">Verwyder</button>`:''}<span></span><button onclick="this.closest('.modal').remove()">Kanselleer</button><button class="primary" onclick="saveRef('${id}',this)">Stoor</button></div>`);document.getElementById('r_team').value=r.teamId||''}
 async function deleteRef(id,btn){if(!admin||!confirm('Verwyder hierdie skeidsregter?'))return;try{if(online){const q=await sb.from('referees').delete().eq('id',id);if(q.error)throw q.error;await refresh()}else{data.refs=data.refs.filter(r=>r.id!==id);localSave()}btn.closest('.modal')?.remove();render()}catch(e){alert(e.message)}}
 async function startMatch(id){if(!admin)return;const m=data.matches.find(x=>x.id===id);if(!m)return;const now=new Date().toISOString();const next={period:m.period||1,clockSeconds:Number(m.clockSeconds||0),clockRunning:true,clockStartedAt:now,status:'live'};Object.assign(m,next);render();try{if(online){const q=await sb.from('matches').update({period:next.period,clock_seconds:next.clockSeconds,clock_running:true,clock_started_at:now,status:'live'}).eq('id',id);if(q.error)throw q.error;await refresh();render()}}catch(e){m.clockRunning=false;m.clockStartedAt=null;render();alert('Wedstryd kon nie begin nie: '+(e?.message||e))}}
