@@ -457,7 +457,7 @@ const playoffForOuderdom=(age)=>{
     const e=get('pool-preview');if(e)e.innerHTML=poolPreviewHtml();
     const per=get('s_per_pool');if(per)per.oninput=()=>{state.teamsPerPool=Math.max(2,Number(per.value)||4);buildPoolPlan();updatePoolUi();};
     const stat=document.querySelector('.schedule-stat strong');if(stat)stat.textContent=selectedTeams().length;
-    const summary=get('team-summary');if(summary){const ts=selectedTeams();summary.innerHTML=ts.length?'<span class="schedule-chip">'+ts.length+' spanne gekies</span><span class="schedule-chip">'+poolSummary()+'</span>':'<span class="muted">No spanne gekies</span>'}
+    const summary=get('team-summary');if(summary){const ts=selectedTeams();summary.innerHTML=ts.length?'<span class="schedule-chip">'+ts.length+' spanne gekies</span><span class="schedule-chip">'+poolSummary()+'</span>':'<span class="muted">Geen spanne gekies</span>'}
   }
   function saveParams(){state.teamsPerPool=Math.max(2,Number(val('s_per_pool')||4));saveState();msg('Opstelling gestoor.','success')}
   function toggleScheduleTeams(on){teams.forEach(t=>{const e=get('team_'+t.id);if(e)e.checked=on});buildPoolPlan();renderSchedule()}
