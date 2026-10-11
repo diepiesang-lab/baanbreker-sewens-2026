@@ -237,7 +237,7 @@ function schoolRefGroups(){
     let short=[...votes.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
     if(!short){
       const cleaned=group.school.replace(/\b(laerskool|laer|ho[eë]rskool|primary school|primary|high school|school)\b/gi,' ').trim();
-      const words=cleaned.split(/\\s+/).filter(Boolean);
+      const words=cleaned.split(/\s+/).filter(Boolean);
       short=/baanbreker/i.test(group.school)?'BB':words.length>1?words.map(word=>word[0]).join(''):((words[0]||group.school).slice(0,2));
       short=short.toUpperCase().replace(/[^A-Z]/g,'');
     }
