@@ -462,7 +462,23 @@ const playoffForAge=(age)=>{
   function saveParams(){state.teamsPerPool=Math.max(2,Number(val('s_per_pool')||4));saveState();msg('Opstelling gestoor.','success')}
   function toggleScheduleTeams(on){teams.forEach(t=>{const e=get('team_'+t.id);if(e)e.checked=on});buildPoolPlan();renderSchedule()}
   function scheduleBack(){window.__baanbrekerScheduleActive=false;if(window.go)window.go('dashboard')}
-  function enter(){window.__baanbrekerScheduleActive=true;if(!loaded)loadTeams().catch(e=>msg(e.message,'error'));else renderSchedule()}
+  async function hasAdminAccess(){
+    if(!online)return false;
+    const session=await sb.auth.getSession();
+    if(session.error||!session.data.session)return false;
+    const access=await sb.rpc('is_baanbreker_admin');
+    return !access.error&&access.data===true;
+  }
+  async function enter(){
+    if(!(await hasAdminAccess())){
+      window.__baanbrekerScheduleActive=false;
+      alert('Slegs aangemelde administrateurs kan die Programbouer sien.');
+      if(originalGo)originalGo('screen');
+      return;
+    }
+    window.__baanbrekerScheduleActive=true;
+    if(!loaded)loadTeams().catch(e=>msg(e.message,'error'));else renderSchedule();
+  }
 
   window.generateSchedule=generate;window.simulateSchedule=simulateSchedule;window.saveGeneratedSchedule=saveGenerated;window.loadScheduleTeams=loadTeams;
   window.scheduleTeamChanged=teamChanged;window.scheduleSelectAge=selectAge;window.toggleScheduleTeams=toggleScheduleTeams;
@@ -470,7 +486,23 @@ const playoffForAge=(age)=>{
 
   const originalGo=window.go;
   window.go=function(v){if(v==='schedule'){enter();return}window.__baanbrekerScheduleActive=false;return originalGo(v)};
-  const addNav=()=>{if(window.__baanbrekerScheduleActive)return;const nav=document.querySelector('.sidebar .nav');if(!nav||nav.querySelector('[data-schedule-nav]'))return;const b=document.createElement('button');b.dataset.scheduleNav='1';b.textContent='Programbouer';b.onclick=()=>window.go('schedule');const admin=[...nav.querySelectorAll('button')].find(x=>x.textContent.trim()==='Admin');admin?nav.insertBefore(b,admin):nav.appendChild(b)};
+  let navAccessCheck=false;
+  const addNav=async()=>{
+    if(navAccessCheck)return;
+    const nav=document.querySelector('.sidebar .nav');
+    if(!nav)return;
+    navAccessCheck=true;
+    try{
+      const allowed=await hasAdminAccess();
+      const existing=nav.querySelector('[data-schedule-nav]');
+      if(!allowed){existing?.remove();return;}
+      if(window.__baanbrekerScheduleActive||existing)return;
+      const b=document.createElement('button');b.dataset.scheduleNav='1';b.textContent='Programbouer';b.onclick=()=>window.go('schedule');
+      const admin=[...nav.querySelectorAll('button')].find(x=>x.textContent.trim()==='Admin');
+      admin?nav.insertBefore(b,admin):nav.appendChild(b);
+    }catch(e){nav.querySelector('[data-schedule-nav]')?.remove()}
+    finally{navAccessCheck=false}
+  };
   new MutationObserver(addNav).observe(document.body,{childList:true,subtree:true});setTimeout(addNav,250);
 
   const css=document.createElement('style');css.textContent=`
