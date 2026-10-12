@@ -188,6 +188,7 @@ const playoffForAge=(age)=>{
     const presidentSteynAges=new Set(selectedTeams().filter(isPresidentSteyn).map(t=>t.age));
     const {teamSchools,refereeSchools}=refereeSchoolIndex();
     const schoolForTeam=team=>team?.id?teamSchools.get(team.id)||schoolIdentity(team.school):'';
+    const presidentSteynSchools=new Set(selectedTeams().filter(isPresidentSteyn).map(schoolForTeam).filter(Boolean));
     const possibleSchoolsForPlaceholder=(label,age)=>{
       const seed=String(label||'').match(/^O\/\d+\s+Pool\s+([A-Z])\s+place\s+\d+$/i);
       const candidates=seed?teams.filter(t=>t.age===age&&String(t.pool||'').toUpperCase()===seed[1].toUpperCase()):/winner$/i.test(String(label||''))?teams.filter(t=>t.age===age):[];
@@ -204,7 +205,7 @@ const playoffForAge=(age)=>{
       return !opponents.includes(refereeSchool);
     };
     const isRestrictedMatch=game=>isPresidentSteyn(game.home)||isPresidentSteyn(game.away)||(game.playoff&&presidentSteynAges.has(game.age));
-    const presidentSteynStartMinute=slot=>slot.date===state.day1?15*60:0;
+    const presidentSteynStartMinute=slot=>slot.date===state.day1?16*60:0;
     const lateSlots=sl.filter(slot=>slot.minute>=presidentSteynStartMinute(slot));
     function preferredFields(age){
       const preferred=age==='O/12'?'A':'B';
@@ -213,7 +214,7 @@ const playoffForAge=(age)=>{
     if(!sl.length){msg('Geen beskikbare tydgleuwe nie. Kontroleer die dag se tye.','error');return}
     const restrictedGames=games.filter(isRestrictedMatch);
     if(restrictedGames.length>lateSlots.length*fields.length){
-      msg('<b>President Steyn se skedulebeperking:</b> '+restrictedGames.length+' poel-/uitspeelwedstryde met President Steyn-spanne, of hul moontlike uitspeelroetes, moet op dag een om 15:00 of later begin. Dag twee het geen tydsbeperking nie. Slegs '+(lateSlots.length*fields.length)+' veldgleuwe voldoen op dag een aan die tydsbeperking. Verleng dag een, voeg velde by of verminder wedstryde/wedstrydlengte.','error');return;
+      msg('<b>President Steyn se skedulebeperking:</b> '+restrictedGames.length+' poel-/uitspeelwedstryde met President Steyn-spanne, of hul moontlike uitspeelroetes, moet op dag een om 16:00 of later begin. Dag twee het geen tydsbeperking nie. Slegs '+(lateSlots.length*fields.length)+' veldgleuwe voldoen op dag een aan die tydsbeperking. Verleng dag een, voeg velde by of verminder wedstryde/wedstrydlengte.','error');return;
     }
     if(games.length>sl.length*fields.length){msg('<b>'+games.length+' wedstryde</b> benodig '+(sl.length*fields.length)+' beskikbare veldgleuwe. Voeg velde/tyd by of verkort wedstrydlengte.','error');return}
 
@@ -238,7 +239,12 @@ const playoffForAge=(age)=>{
     function placeGame(game,slot,field){
       const key=slot.date+'|'+slot.time;
       const eligibleRefs=state.autoRefs&&!game.playoff
-        ? refs.filter(r=>!refUsed[key+'|'+r.id]&&refAllowedForGame(r,game))
+        ? refs.filter(r=>{
+            const refereeSchool=refereeSchools.get(r.id);
+            const presidentSteynRef=refereeSchool&&presidentSteynSchools.has(refereeSchool);
+            const availableByTime=!presidentSteynRef||slot.date!==state.day1||slot.minute>=16*60;
+            return availableByTime&&!refUsed[key+'|'+r.id]&&refAllowedForGame(r,game);
+          })
         : [];
       eligibleRefs.sort((a,b)=>(refLoad.get(a.id)||0)-(refLoad.get(b.id)||0)||String(a.name||'').localeCompare(String(b.name||'')));
       const ref=eligibleRefs[0]||null;
@@ -316,7 +322,7 @@ const playoffForAge=(age)=>{
       preview=[];renderSchedule();
       if(simulateOnly)showSimulationLog();
       if(remaining.some(isRestrictedMatch)){
-        msg('Kon nie al die President Steyn-poel-/uitspeelwedstryde op dag een om 15:00 of later inpas nie. Dag twee het geen tydsbeperking nie. Verleng dag een, voeg velde by of verminder wedstrydlengte/rustyd. '+remaining.length+' wedstryde bly oor.','error');
+        msg('Kon nie al die President Steyn-poel-/uitspeelwedstryde op dag een om 16:00 of later inpas nie. Dag twee het geen tydsbeperking nie. Verleng dag een, voeg velde by of verminder wedstrydlengte/rustyd. '+remaining.length+' wedstryde bly oor.','error');
         return;
       }
       msg('Kon nie al die wedstryde plaas nie. Verminder rustyd/wedstrydlengte of voeg velde by. '+remaining.length+' wedstryde bly oor.','error');
