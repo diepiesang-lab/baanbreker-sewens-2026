@@ -268,7 +268,7 @@ function scorePanel(m){
     <div class="score-main-grid">
       <div class="score-team-card home"><div class="score-team-logo-wrap">${teamLogo(m.homeId)}</div><span class="score-short">${esc(homeName)}</span><strong>${m.homeScore||0}</strong></div>
       <div class="score-center"><div class="score-period">${c}</div><div class="live-clock"><strong>${timerLabel(m)}</strong><small>${running?'● LIVE':'KLOK GESTOP'}</small></div>
-        <div class="timer-controls">${period===0?`<button class="primary" onclick="startMatch('${m.id}')">▶ BEGIN</button>`:''}${period>0&&running?`<button onclick="pauseMatch('${m.id}')">⏸ POUSE</button>`:''}${period===1&&!running&&elapsed(m)<360?`<button class="primary" onclick="startMatch('${m.id}')">▶ HERVAT</button>`:''}${period===1&&!running&&elapsed(m)>=360?`<button class="primary" onclick="startSecondHalf('${m.id}')">▶ 2DE HELFTE</button>`:''}${period===2&&!running&&elapsed(m)<360?`<button class="primary" onclick="startMatch('${m.id}')">▶ HERVAT</button>`:''}${period>0||m.status==='completed'?`<button class="danger" onclick="finishMatch('${m.id}')">${m.status==='completed'?(manOfMatch(m)?'WYSIG MAN OF THE MATCH':'MAN OF THE MATCH'):'✓ RONDE KLAAR'}</button>`:''}</div>
+        <div class="timer-controls">${period===0?`<button class="primary" onclick="startMatch('${m.id}')">▶ BEGIN</button>`:''}${period>0&&running?`<button onclick="pauseMatch('${m.id}')">⏸ POUSE</button>`:''}${period===1&&!running&&elapsed(m)<360?`<button class="primary" onclick="startMatch('${m.id}')">▶ HERVAT</button>`:''}${period===1&&!running&&elapsed(m)>=360?`<button class="primary" onclick="startSecondHalf('${m.id}')">▶ 2DE HELFTE</button>`:''}${period===2&&!running&&elapsed(m)<360?`<button class="primary" onclick="startMatch('${m.id}')">▶ HERVAT</button>`:''}${period>0||m.status==='completed'?`<button class="danger" onclick="finishMatch('${m.id}')">${m.status==='completed'?(manOfMatch(m)?'WYSIG MAN OF THE MATCH':'MAN OF THE MATCH'):'✓ RONDTE KLAAR'}</button>`:''}</div>
       </div>
       <div class="score-team-card away"><div class="score-team-logo-wrap">${teamLogo(m.awayId)}</div><span class="score-short">${esc(awayName)}</span><strong>${m.awayScore||0}</strong></div>
     </div>
@@ -348,7 +348,7 @@ async function finishMatch(id){
   const existing=manOfMatch(m);
   const entered=prompt('Wie is die Man of the Match?',existing);
   if(entered===null)return;
-  const name=entered.trim().replace(/\\s+/g,' ');
+  const name=entered.trim().replace(/\s+/g,' ');
   if(!name){alert('Voer asseblief die Man of the Match se naam in.');return;}
   const notes=matchNotesWithManOfMatch(m.notes,name);
   const now=new Date().toISOString();
