@@ -1,6 +1,6 @@
-# Laerskool Baanbreker Sewens 2026
+# Laerskool Baanbreker Sewes 2026
 
-Tournament web app for Laerskool Baanbreker Sewens 2026.
+Tournament web app for Laerskool Baanbreker Sewes 2026.
 
 ## Deployment
 Upload the CONTENTS of this folder to the GitHub repository root so `index.html` is at the deployed root.
