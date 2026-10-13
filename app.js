@@ -2,7 +2,7 @@ const CFG=window.BAANBREKER_CONFIG||{};
 const online=!!(CFG.supabaseUrl&&CFG.supabaseAnonKey&&window.supabase);
 const sb=online?window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAnonKey):null;
 const KEY='baanbreker_sewens_2026_v3';
-const seed={settings:{name:'Laerskool Baanbreker Sewens',subtitle:'2026 Rugby Sewens Toernooi',dates:'16–17 Oktober 2026',location:'Laerskool Baanbreker',logoUrl:'baanbreker-logo.png',primary:'#123f2d',accent:'#d6a83d'},teams:[],refs:[],matches:[],events:[]};
+const seed={settings:{name:'Laerskool Baanbreker Sewes',subtitle:'2026 Rugby Sewes Toernooi',dates:'16–17 Oktober 2026',location:'Laerskool Baanbreker',logoUrl:'baanbreker-logo.png',primary:'#123f2d',accent:'#d6a83d'},teams:[],refs:[],matches:[],events:[]};
 const cloneData=value=>typeof structuredClone==='function'?structuredClone(value):JSON.parse(JSON.stringify(value));
 let data=cloneData(seed),view='dashboard',age='O/11',pool='All',scoreAge='All',scorePool='All',filterStatus='all',admin=false,user=null,session=null,timer=null;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
