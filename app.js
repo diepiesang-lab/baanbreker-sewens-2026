@@ -395,7 +395,7 @@ async function resetTournamentResults(){
     alert('Alle tellings en Man of the Match-keuses is skoongemaak.');
   }catch(e){alert('Die resultaat-herstel kon nie volledig voltooi word nie: '+(e?.message||e))}
 }
-async function resetMatch(id){if(!admin||!confirm('Reset wedstryd en telling?'))return;try{if(online){const q=await sb.from('matches').update({home_score:0,away_score:0,status:'scheduled',period:0,clock_seconds:0,clock_running:false,clock_started_at:null,completed_at:null}).eq('id',id);if(q.error)throw q.error;const d=await sb.from('match_events').delete().eq('match_id',id);if(d.error)throw d.error;await refresh()}else{const m=data.matches.find(x=>x.id===id);if(m){Object.assign(m,{homeScore:0,awayScore:0,status:'scheduled',period:0,clockSeconds:0,clockRunning:false,clockStartedAt:null});data.events=data.events.filter(e=>e.matchId!==id);render()}}}catch(e){alert(e.message)}}
+async function resetMatch(id){if(!admin||!confirm('Reset wedstryd en telling?'))return;const m=data.matches.find(x=>x.id===id);try{if(online){const q=await sb.from('matches').update({home_score:0,away_score:0,status:'scheduled',period:0,clock_seconds:0,clock_running:false,clock_started_at:null,completed_at:null,notes:clearManOfMatch(m?.notes||'')}).eq('id',id);if(q.error)throw q.error;const d=await sb.from('match_events').delete().eq('match_id',id);if(d.error)throw d.error;await refresh()}else{if(m){Object.assign(m,{homeScore:0,awayScore:0,status:'scheduled',period:0,clockSeconds:0,clockRunning:false,clockStartedAt:null,completedAt:null,notes:clearManOfMatch(m.notes)});data.events=data.events.filter(e=>e.matchId!==id);render()}}}catch(e){alert(e.message)}}
 const scoreBusy=new Set();
 async function recordScore(matchId,teamId,type,points){
   if(!admin)return;
