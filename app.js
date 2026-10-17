@@ -275,7 +275,7 @@ function scorePanel(m){
       <div class="score-team-card away"><div class="score-team-logo-wrap">${teamLogo(m.awayId)}</div><span class="score-short">${esc(awayName)}</span><strong>${m.awayScore||0}</strong></div>
     </div>
     ${period>0&&m.status!=='completed'?`<div class="scoring-actions-grid"><div class="score-action-side"><div class="action-team"><span>${teamLogo(m.homeId)}</span><b>${esc(homeName)}</b></div><button class="score-btn try" onclick="recordScore('${m.id}','${m.homeId}','try',5)"><span>DRIE</span><strong>+5</strong></button><button class="score-btn conversion" onclick="recordScore('${m.id}','${m.homeId}','conversion',2)"><span>DOELSKOP</span><strong>+2</strong></button><button class="score-btn penalty" onclick="recordScore('${m.id}','${m.homeId}','penalty',3)"><span>STRAFSKOP</span><strong>+3</strong></button><button class="score-btn drop" onclick="recordScore('${m.id}','${m.homeId}','drop_goal',3)"><span>DROP-DOEL</span><strong>+3</strong></button></div><div class="score-action-side"><div class="action-team"><span>${teamLogo(m.awayId)}</span><b>${esc(awayName)}</b></div><button class="score-btn try" onclick="recordScore('${m.id}','${m.awayId}','try',5)"><span>DRIE</span><strong>+5</strong></button><button class="score-btn conversion" onclick="recordScore('${m.id}','${m.awayId}','conversion',2)"><span>DOELSKOP</span><strong>+2</strong></button><button class="score-btn penalty" onclick="recordScore('${m.id}','${m.awayId}','penalty',3)"><span>STRAFSKOP</span><strong>+3</strong></button><button class="score-btn drop" onclick="recordScore('${m.id}','${m.awayId}','drop_goal',3)"><span>DROP-DOEL</span><strong>+3</strong></button></div></div>`:''}
-    <div class="score-bottom-actions"><button onclick="undoEvent('${m.id}')">↩ ONTHOU LAASTE</button><button onclick="resetMatch('${m.id}')">↺ RESET</button></div>
+    <div class="score-bottom-actions">${m.status==='completed'?'<button class="primary" onclick="openFinalScoreEditor(\''+m.id+'\')">Wysig eindtelling</button>':''}<button onclick="undoEvent('${m.id}')">↩ ONTHOU LAASTE</button><button onclick="resetMatch('${m.id}')">↺ RESET</button></div>
   </section>`;
 }
 function teamsView(){if(!admin)return `<div class="panel empty"><h2>Spanne</h2><p>Admin toegang benodig om spanne te bestuur.</p></div>`;return `<div class="title-row"><div><h2>Spanne</h2><p>Bestuur O/11 en O/12 spanne.</p></div><button class="primary" onclick="openTeam()">+ Voeg span</button></div><div class="cards">${data.teams.map(t=>`<div class="team-card"><div class="team-mark">${t.logoUrl?`<img src="${esc(t.logoUrl)}" alt="">`:esc((t.short||t.name||'?').slice(0,3).toUpperCase())}</div><div><h3>${esc(t.name)}</h3><small>${esc(t.age)} · Poel ${esc(t.pool||'—')}</small></div><button onclick="openTeam('${t.id}')">Wysig</button></div>`).join('')||empty('Geen spanne nie.')}</div>`}
@@ -450,6 +450,31 @@ async function resetTournamentResults(){
   }catch(e){alert('Die resultaat-herstel kon nie volledig voltooi word nie: '+(e?.message||e))}
 }
 async function resetMatch(id){if(!admin||!confirm('Reset wedstryd en telling?'))return;const m=data.matches.find(x=>x.id===id);try{if(online){const q=await sb.from('matches').update({home_score:0,away_score:0,status:'scheduled',period:0,clock_seconds:0,clock_running:false,clock_started_at:null,completed_at:null,notes:clearManOfMatch(m?.notes||'')}).eq('id',id);if(q.error)throw q.error;const d=await sb.from('match_events').delete().eq('match_id',id);if(d.error)throw d.error;await refresh()}else{if(m){Object.assign(m,{homeScore:0,awayScore:0,status:'scheduled',period:0,clockSeconds:0,clockRunning:false,clockStartedAt:null,completedAt:null,notes:clearManOfMatch(m.notes)});data.events=data.events.filter(e=>e.matchId!==id);render()}}}catch(e){alert(e.message)}}
+function openFinalScoreEditor(id){
+  if(!admin)return alert('Admin-toegang benodig.');
+  const m=data.matches.find(x=>x.id===id);
+  if(!m||m.status!=='completed')return alert('Slegs voltooide wedstryde se eindtellings kan hier gewysig word.');
+  modal(`<h2>Wysig eindtelling</h2><p>${esc(teamName(m.homeId))} teen ${esc(teamName(m.awayId))}</p><div class="twocol"><label>${esc(teamName(m.homeId))}<input id="final_home_score" type="number" min="0" step="1" value="${Number(m.homeScore)||0}"></label><label>${esc(teamName(m.awayId))}<input id="final_away_score" type="number" min="0" step="1" value="${Number(m.awayScore)||0}"></label></div><small>Dit verander die eindtelling. Die aangetekende puntgebeurtenisse bly onveranderd.</small><div class="modal-actions"><span></span><button onclick="this.closest('.modal').remove()">Kanselleer</button><button class="primary" onclick="saveFinalScore('${id}',this)">Stoor telling</button></div>`);
+}
+async function saveFinalScore(id,btn){
+  if(!admin)return alert('Admin-toegang benodig.');
+  const m=data.matches.find(x=>x.id===id);
+  if(!m||m.status!=='completed')return alert('Slegs voltooide wedstryde se eindtellings kan hier gewysig word.');
+  const home=Number(val('final_home_score')),away=Number(val('final_away_score'));
+  if(!Number.isSafeInteger(home)||home<0||!Number.isSafeInteger(away)||away<0)return alert('Tellings moet heelgetalle van nul of hoër wees.');
+  try{
+    btn.disabled=true;
+    if(online){
+      const q=await sb.from('matches').update({home_score:home,away_score:away}).eq('id',id);
+      if(q.error)throw q.error;
+      await refresh();
+    }else{
+      m.homeScore=home;m.awayScore=away;localSave();
+    }
+    document.querySelector('.modal')?.remove();
+    render();
+  }catch(e){btn.disabled=false;alert('Eindtelling kon nie gestoor word nie: '+(e.message||e))}
+}
 const scoreBusy=new Set();
 async function recordScore(matchId,teamId,type,points){
   if(!admin)return;
