@@ -376,13 +376,9 @@ async function savePlayoffRefAssignments(btn){
     for(const {match,refId} of assignments){
       if(match.refId===refId)continue;
       if(online){
-        const q=await sb.rpc('save_baanbreker_match',{
-          p_id:match.id,p_age:match.age,p_pool:match.pool,p_round:match.round,
-          p_date:match.date,p_time:match.time,p_field:match.field,p_home_id:match.homeId,p_away_id:match.awayId,
-          p_referee_id:refId||null,p_home_score:match.homeScore||0,p_away_score:match.awayScore||0,p_status:match.status||'scheduled'
-        });
+        const q=await sb.from('matches').update({referee_id:refId||null}).eq('id',match.id).select('id').single();
         if(q.error)throw q.error;
-        if(String(q.data||'').toLowerCase()!==String(match.id).toLowerCase())throw new Error('Die databasis het nie die wedstrydtoewysing bevestig nie.');
+        if(String(q.data?.id||'').toLowerCase()!==String(match.id).toLowerCase())throw new Error('Die databasis het nie die skeidsregtertoewysing bevestig nie.');
       }
       match.refId=refId||null;
       saved++;
