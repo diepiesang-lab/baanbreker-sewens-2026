@@ -164,7 +164,11 @@ async function resolvePlayoffTeams(){
           if(seed)return poolSeedId(age,seed[1].toUpperCase(),Number(seed[2]));
           const winner=/^(Cup|Shield|Plate) Game (\d+) winner$/i.exec(label.trim());
           if(!winner)return null;
-          const semi=data.matches.find(m=>m.age===age&&m.notes.startsWith('PLAYOFF PLACEHOLDER |')&&new RegExp('Semi\\s+'+winner[2]+'\\b','i').test(m.round));
+          const bracket=winner[1].toLowerCase(),gameNo=Number(winner[2]);
+          const semiNo=gameNo-(bracket==='cup'?0:bracket==='shield'?2:4);
+          if(semiNo<1||semiNo>2)return null;
+          const targetRound=bracket+' semi '+semiNo;
+          const semi=data.matches.find(m=>m.age===age&&m.notes.startsWith('PLAYOFF PLACEHOLDER |')&&String(m.round||'').trim().toLowerCase()===targetRound);
           if(!semi||semi.status!=='completed'||!semi.homeId||!semi.awayId||semi.homeScore===semi.awayScore)return null;
           return semi.homeScore>semi.awayScore?semi.homeId:semi.awayId;
         };
